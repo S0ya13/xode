@@ -76,5 +76,15 @@ mkdir -p "${STAGED:h}"
 ditto "$mnt/$APP_NAME" "$STAGED"
 hdiutil detach -quiet "$mnt"
 
+# A stable identity (fork/setup-signing.sh) keeps keychain and privacy permissions across updates.
+SIGNING_KEYCHAIN="$HOME/Library/Application Support/xode-signing/xode-signing.keychain-db"
+if [[ -f "$SIGNING_KEYCHAIN" ]]; then
+  {
+    security unlock-keychain -p "$(<"${SIGNING_KEYCHAIN:h}/keychain-password")" "$SIGNING_KEYCHAIN" &&
+      identity="$(security find-certificate -c "Xode Local Signing" -Z "$SIGNING_KEYCHAIN" | awk '/SHA-1/ { print $3 }')" &&
+      codesign --force --deep --sign "$identity" --keychain "$SIGNING_KEYCHAIN" "$STAGED"
+  } || { rm -rf "$STAGED"; fail "Signing failed"; }
+fi
+
 git push -q origin main || notify "Built $version, but git push to origin failed"
 apply_staged
