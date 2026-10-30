@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Merge upstream main into the fork, rebuild "T3 Code (Fork)" and install it into /Applications.
+# Merge upstream main into the fork, rebuild "Xode" and install it into /Applications.
 # Runs from launchd every 3h (fork/com.s0ya13.t3code-fork.sync.plist); run by hand to sync now.
 # --force rebuilds even when upstream has nothing new.
 set -euo pipefail
@@ -7,7 +7,7 @@ export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 REPO="${0:A:h:h}"
-APP_NAME="T3 Code (Fork).app"
+APP_NAME="Xode.app"
 APP="/Applications/$APP_NAME"
 STAGED="$HOME/Library/Caches/t3code-fork/$APP_NAME"
 cd "$REPO"
@@ -15,14 +15,14 @@ cd "$REPO"
 log() { echo "$(date '+%F %T') $1"; }
 notify() {
   log "$1"
-  osascript -e "display notification \"$1\" with title \"T3 Code Fork\"" >/dev/null 2>&1 || true
+  osascript -e "display notification \"$1\" with title \"Xode\"" >/dev/null 2>&1 || true
 }
 
 # Replacing the bundle under a running Electron app crashes its helper processes, so wait until it quits.
 apply_staged() {
   [[ -d "$STAGED" ]] || return 0
-  if pgrep -f 'T3 Code \(Fork\)\.app/Contents/MacOS/' >/dev/null; then
-    notify "Update ready: quit T3 Code (Fork) and run fork/sync.sh, or wait for the next sync"
+  if pgrep -f 'Xode\.app/Contents/MacOS/' >/dev/null; then
+    notify "Update ready: quit Xode and run fork/sync.sh, or wait for the next sync"
     return 0
   fi
   rm -rf "$APP"
