@@ -9,7 +9,6 @@ import * as NodePath from "node:path";
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
-  DesktopUpdateReleaseNote,
   DesktopUpdateState,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -113,27 +112,46 @@ const lastSyncMessage = (): string | null => {
   return null;
 };
 
-type Upstream =
-  | { readonly kind: "current" }
-  | {
-      readonly kind: "behind";
-      readonly version: string;
-      readonly notes: ReadonlyArray<DesktopUpdateReleaseNote>;
-    };
+const lines = (output: string) => output.split("\n").filter((line) => line.length > 0);
 
-/** Fetches upstream and names the build a sync would produce, with upstream's commits as notes. */
-const inspectUpstream: Effect.Effect<Upstream, ForkUpdateCommandError> = Effect.gen(function* () {
+/** sync.sh names a build `<version>-fork.<commit count>`; null for any other build. */
+const forkBuildNumber = (version: string): number | null => {
+  const match = /-fork\.(\d+)$/.exec(version);
+  return match ? Number(match[1]) : null;
+};
+
+/**
+ * Fetches upstream and names the build a sync would produce. It is due when upstream has new
+ * commits or the fork has commits newer than the running build; their subjects become the notes.
+ */
+const inspectUpstream = Effect.fn("ForkUpdates.inspectUpstream")(function* (
+  runningVersion: string,
+) {
   yield* git("fetch", "-q", "upstream", "main");
   const behind = Number(yield* git("rev-list", "--count", "HEAD..upstream/main"));
-  if (behind === 0) return { kind: "current" } as const;
   const ownCommits = Number(yield* git("rev-list", "--count", "HEAD"));
-  const upstreamPackage = yield* git("show", "upstream/main:apps/desktop/package.json");
-  const upstreamVersion = /"version":\s*"([^"]+)"/.exec(upstreamPackage)?.[1] ?? "upstream";
-  // sync.sh versions a build by its commit count, and the merge adds one commit.
-  const version = `${upstreamVersion}-fork.${ownCommits + behind + 1}`;
-  const subjects = (yield* git("log", "--no-merges", "--format=%s", "HEAD..upstream/main"))
-    .split("\n")
-    .filter((line) => line.length > 0);
+  const built = forkBuildNumber(runningVersion);
+  const unbuilt = built === null ? 0 : Math.max(0, ownCommits - built);
+  if (behind === 0 && unbuilt === 0) return { kind: "current" } as const;
+  const versionSource = behind > 0 ? "upstream/main" : "HEAD";
+  const packageJson = yield* git("show", `${versionSource}:apps/desktop/package.json`);
+  const baseVersion = /"version":\s*"([^"]+)"/.exec(packageJson)?.[1] ?? "fork";
+  // A merge adds one commit to the count the build is named by.
+  const version = `${baseVersion}-fork.${ownCommits + (behind > 0 ? behind + 1 : 0)}`;
+  const upstreamSubjects =
+    behind > 0 ? lines(yield* git("log", "--no-merges", "--format=%s", "HEAD..upstream/main")) : [];
+  // shortcut: the newest commits stand in for "since the running build", which merges can blur.
+  const ownSubjects =
+    unbuilt > 0
+      ? lines(yield* git("log", "--no-merges", "--format=%s", `--max-count=${unbuilt}`, "HEAD"))
+      : [];
+  const subjects = [...ownSubjects, ...upstreamSubjects];
+  const intro = [
+    ownSubjects.length > 0 ? `${ownSubjects.length} of your changes` : null,
+    upstreamSubjects.length > 0 ? `${upstreamSubjects.length} upstream changes` : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
   return {
     kind: "behind",
     version,
@@ -142,7 +160,7 @@ const inspectUpstream: Effect.Effect<Upstream, ForkUpdateCommandError> = Effect.
         version,
         items: subjects.slice(0, MAX_NOTES),
         totalItems: subjects.length,
-        intro: `Merges ${subjects.length} upstream changes into your fork.`,
+        intro: `Builds ${intro} into Tritium.`,
       },
     ],
   } as const;
@@ -204,7 +222,7 @@ const make = Effect.gen(function* () {
           );
           return { checked: true, state };
         }
-        const upstream = yield* inspectUpstream.pipe(Effect.result);
+        const upstream = yield* inspectUpstream(environment.appVersion).pipe(Effect.result);
         const state = yield* update((current) => {
           if (upstream._tag === "Failure") {
             return reduceDesktopUpdateStateOnCheckFailure(

@@ -69,7 +69,12 @@ apply_staged
 [[ -z "$(git status --porcelain)" ]] || { notify "Sync skipped: uncommitted changes in $REPO"; exit 0; }
 
 git fetch -q upstream main
-if git merge-base --is-ancestor upstream/main HEAD && ! $force; then
+# The build is current when it carries upstream and was built from this commit count.
+build_of() { defaults read "$1/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || true; }
+latest_build="$(build_of "$STAGED")"
+[[ -n "$latest_build" ]] || latest_build="$(build_of "$APP")"
+if git merge-base --is-ancestor upstream/main HEAD && ! $force &&
+  [[ "${latest_build##*-fork.}" == "$(git rev-list --count HEAD)" ]]; then
   log "Up to date with upstream"
   exit 0
 fi
