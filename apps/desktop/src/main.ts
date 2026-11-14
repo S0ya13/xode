@@ -70,8 +70,7 @@ import * as DesktopState from "./app/DesktopState.ts";
 import * as DesktopLegacyLocalStorage from "./app/DesktopLegacyLocalStorage.ts";
 import * as DesktopTelemetryPublisher from "./telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopRendererHistory from "./telemetry/DesktopRendererHistory.ts";
-import * as DesktopUpdatePolicy from "./updates/DesktopUpdatePolicy.ts";
-import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
+import * as ForkUpdates from "./updates/ForkUpdates.ts";
 import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
 import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.ts";
 import * as BrowserSession from "./preview/BrowserSession.ts";
@@ -228,11 +227,8 @@ const layerDesktopApplication = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(layerDesktopSnapShot),
   Layer.provideMerge(
-    DesktopUpdates.layer.pipe(
-      Layer.provide(DesktopUpdatePolicy.layer),
-      // The same layer as the foundation's, so the policy is still read once.
-      Layer.provide(DesktopManagedPolicy.layer),
-    ),
+    // Fork: the update button merges upstream and rebuilds instead of downloading releases.
+    ForkUpdates.layer,
   ),
   // Updates closes the same tunnels the SSH IPC opens before quitAndInstall.
   Layer.provideMerge(layerDesktopSsh),

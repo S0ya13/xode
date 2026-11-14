@@ -2,6 +2,9 @@
 # Merge upstream main into the fork, rebuild "Tritium" and install it into /Applications.
 # Runs from launchd every 3h (fork/com.s0ya13.t3code-fork.sync.plist); run by hand to sync now.
 # --force rebuilds even when upstream has nothing new.
+# --from-app is the app's "Update" button: it waits for a running sync, leaves the build staged and
+#   reports only to the log, since the app shows progress itself.
+# --install-staged runs detached after the app quits to update: it swaps in the staged build and reopens it.
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -12,9 +15,19 @@ APP="/Applications/$APP_NAME"
 STAGED="$HOME/Library/Caches/t3code-fork/$APP_NAME"
 cd "$REPO"
 
+force=false from_app=false install_staged=false
+for arg in "$@"; do
+  case "$arg" in
+    --force) force=true ;;
+    --from-app) from_app=true ;;
+    --install-staged) install_staged=true ;;
+  esac
+done
+
 log() { echo "$(date '+%F %T') $1"; }
 notify() {
   log "$1"
+  $from_app && return 0
   osascript -e "display notification \"$1\" with title \"Tritium\"" >/dev/null 2>&1 || true
 }
 
@@ -33,8 +46,22 @@ apply_staged() {
 LOCK="$REPO/.git/fork-sync.lock"
 # A sync killed mid-build (reboot, logout) never runs its trap; no sync takes 3 hours.
 find "$LOCK" -maxdepth 0 -mmin +180 -exec rmdir {} \; 2>/dev/null || true
-mkdir "$LOCK" 2>/dev/null || { log "Another sync is running"; exit 0; }
+# Wait for the app to finish quitting before holding the lock, so a refused quit never blocks syncs.
+if $install_staged; then
+  while pgrep -f 'Tritium\.app/Contents/MacOS/' >/dev/null; do sleep 1; done
+fi
+if $from_app || $install_staged; then
+  until mkdir "$LOCK" 2>/dev/null; do sleep 2; done
+else
+  mkdir "$LOCK" 2>/dev/null || { log "Another sync is running"; exit 0; }
+fi
 trap 'rmdir "$LOCK"' EXIT
+
+if $install_staged; then
+  apply_staged
+  open "$APP"
+  exit 0
+fi
 
 apply_staged
 
@@ -42,7 +69,7 @@ apply_staged
 [[ -z "$(git status --porcelain)" ]] || { notify "Sync skipped: uncommitted changes in $REPO"; exit 0; }
 
 git fetch -q upstream main
-if git merge-base --is-ancestor upstream/main HEAD && [[ "${1:-}" != --force ]]; then
+if git merge-base --is-ancestor upstream/main HEAD && ! $force; then
   log "Up to date with upstream"
   exit 0
 fi

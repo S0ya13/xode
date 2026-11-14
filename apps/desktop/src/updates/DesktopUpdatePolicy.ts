@@ -83,6 +83,7 @@ const make = Effect.gen(function* () {
   );
 });
 
+/** @public Fork: unused while ForkUpdates replaces DesktopUpdates in main.ts. */
 export const layer = Layer.effect(DesktopUpdatePolicy, make);
 
 export const layerTest = (policy: UpdatePolicy = unmanagedUpdatePolicy) =>
