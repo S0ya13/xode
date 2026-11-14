@@ -10,6 +10,7 @@ import { useSyncExternalStore, type ReactNode } from "react";
 
 import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 import { useQuietThreadProjection } from "../../state/entities";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -116,11 +117,25 @@ export function ThreadDetailsContextSummary({
     maxTokens !== null && threshold !== null && threshold > 0 && threshold < maxTokens
       ? (threshold / maxTokens) * 100
       : null;
+  // The input is the whole conversation sent with the last request, cache reads included, so
+  // listing it beside the cache read repeats the context size. Show the cached share and the
+  // last reply instead.
+  const cachedPercent =
+    usage.inputTokens != null && usage.inputTokens > 0 && usage.cachedInputTokens != null
+      ? Math.round((usage.cachedInputTokens / usage.inputTokens) * 100)
+      : null;
   const breakdown = [
-    usage.inputTokens != null ? `in ${tokens(usage.inputTokens)}` : null,
-    usage.cachedInputTokens != null ? `cache ${tokens(usage.cachedInputTokens)}` : null,
-    usage.outputTokens != null ? `out ${tokens(usage.outputTokens)}` : null,
+    cachedPercent !== null ? `${cachedPercent}% cached` : null,
+    usage.outputTokens != null ? `last reply ${tokens(usage.outputTokens)} tok` : null,
   ].filter((part) => part !== null);
+  const breakdownTitle =
+    usage.inputTokens != null
+      ? `The last request sent ${tokens(usage.inputTokens)} tokens` +
+        (usage.cachedInputTokens != null
+          ? `, ${tokens(usage.cachedInputTokens)} of them from the prompt cache`
+          : "") +
+        (usage.outputTokens != null ? `. Its reply was ${tokens(usage.outputTokens)} tokens.` : ".")
+      : undefined;
   return (
     <ThreadDetailsSection
       headingId="thread-details-context-summary-heading"
@@ -177,11 +192,21 @@ export function ThreadDetailsContextSummary({
           ) : null}
         </div>
         {breakdown.length > 0 ? (
-          <div className="flex flex-wrap gap-x-3 text-muted-foreground tabular-nums">
-            {breakdown.map((part) => (
-              <span key={part}>{part}</span>
-            ))}
-          </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <div
+                  tabIndex={0}
+                  className="flex cursor-default flex-wrap gap-x-3 rounded text-muted-foreground tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                />
+              }
+            >
+              {breakdown.map((part) => (
+                <span key={part}>{part}</span>
+              ))}
+            </TooltipTrigger>
+            {breakdownTitle ? <TooltipPopup>{breakdownTitle}</TooltipPopup> : null}
+          </Tooltip>
         ) : null}
       </div>
     </ThreadDetailsSection>
