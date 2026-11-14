@@ -100,7 +100,8 @@ describe("deriveLastTurnStats", () => {
       modelMs: 25_000,
       steps: 5,
       firstTokenMs: 2_000,
-      tokensPerSecond: 24,
+      // 600 output tokens over 23s of model time after the first token.
+      tokensPerSecond: 26,
       cacheHitPercent: 90,
     });
   });

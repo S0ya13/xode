@@ -53,7 +53,26 @@ function Heading({ title, aside }: { readonly title: string; readonly aside?: Re
 }
 
 /** Context use at a glance: the share used, the window size, and the auto-compaction mark. */
-export function ThreadDetailsContextSummary({ usage }: { readonly usage: ContextWindowSnapshot }) {
+export function ThreadDetailsContextSummary({
+  usage,
+}: {
+  readonly usage: ContextWindowSnapshot | null;
+}) {
+  // Some providers never report context, and none have before the first reply.
+  if (usage === null) {
+    return (
+      <ThreadDetailsSection
+        headingId="thread-details-context-summary-heading"
+        title="Context"
+        showHeading={false}
+      >
+        <div className="flex h-7 items-center justify-between gap-2 px-2.5 text-xs">
+          <span className="font-medium">Context</span>
+          <span className="text-muted-foreground">Not reported yet</span>
+        </div>
+      </ThreadDetailsSection>
+    );
+  }
   const maxTokens = usage.maxTokens != null && usage.maxTokens > 0 ? usage.maxTokens : null;
   const used =
     maxTokens !== null && usage.usedPercentage !== null

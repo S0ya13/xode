@@ -18,6 +18,8 @@ const TOOL_ITEM_TYPES: ReadonlySet<Item["type"]> = new Set([
   "subagent",
 ]);
 
+const MIN_RATED_OUTPUT_TOKENS = 20;
+
 const ms = (value: DateTime.Utc | null | undefined) =>
   value == null ? null : DateTime.toEpochMillis(value);
 
@@ -148,6 +150,10 @@ export function deriveLastTurnStats(
   const toolMs = Math.min(elapsedMs, unionDurationMs(toolSpans));
   const modelMs = Math.max(0, elapsedMs - toolMs);
   const tokens = sumTurnTokens(runProviderTurns(projection, new Set([run.id])));
+  const firstTokenMs = firstOutputMs === null ? null : Math.max(0, firstOutputMs - startedAtMs);
+  // Generation speed: output over model time after the first token, so latency does not drag it
+  // down. Tiny replies are mostly latency, so they get no rate.
+  const generatingMs = modelMs - (firstTokenMs ?? 0);
   return {
     running: run.completedAt === null,
     startedAtMs,
@@ -155,11 +161,11 @@ export function deriveLastTurnStats(
     toolMs,
     modelMs,
     steps,
-    firstTokenMs: firstOutputMs === null ? null : Math.max(0, firstOutputMs - startedAtMs),
+    firstTokenMs,
     tokens,
     tokensPerSecond:
-      tokens && tokens.output > 0 && modelMs >= 1_000
-        ? Math.round(tokens.output / (modelMs / 1_000))
+      tokens && tokens.output >= MIN_RATED_OUTPUT_TOKENS && generatingMs >= 1_000
+        ? Math.round(tokens.output / (generatingMs / 1_000))
         : null,
     // Input includes cache reads, so the share of input served from cache.
     cacheHitPercent:

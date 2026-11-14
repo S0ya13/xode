@@ -177,8 +177,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         return (
           <>
             <div className="group/details-items">
-              {visible.context && props.usage.contextWindow ? (
-                <ThreadDetailsContextSummary usage={props.usage.contextWindow} />
+              {visible.context ? (
+                <ThreadDetailsContextSummary usage={props.usage.contextWindow ?? null} />
               ) : null}
 
               {!props.draftId ? (
