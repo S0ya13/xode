@@ -9,6 +9,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useSyncExternalStore, type ReactNode } from "react";
 
 import { formatContextWindowTokens } from "../../lib/contextWindow";
+import { Button } from "../ui/button";
 import { cn } from "../../lib/utils";
 import { useQuietThreadProjection } from "../../state/entities";
 import { buildThreadRouteParams } from "../../threadRoutes";
@@ -52,11 +53,40 @@ function Heading({ title, aside }: { readonly title: string; readonly aside?: Re
   );
 }
 
+export interface ThreadDetailsCompact {
+  readonly onCompact: () => void;
+  readonly disabled: boolean;
+}
+
+/** Runs the same /compact as the composer, and is off while that would be refused. */
+function CompactButton({ compact }: { readonly compact: ThreadDetailsCompact | undefined }) {
+  if (!compact) return null;
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="ghost-muted"
+      className="-my-1 -mr-1.5"
+      disabled={compact.disabled}
+      title={
+        compact.disabled
+          ? "Compact is available when the agent is idle and the thread has a conversation"
+          : "Summarize the conversation to free context"
+      }
+      onClick={compact.onCompact}
+    >
+      Compact
+    </Button>
+  );
+}
+
 /** Context use at a glance: the share used, the window size, and the auto-compaction mark. */
 export function ThreadDetailsContextSummary({
   usage,
+  compact,
 }: {
   readonly usage: ContextWindowSnapshot | null;
+  readonly compact?: ThreadDetailsCompact | undefined;
 }) {
   // Some providers never report context, and none have before the first reply.
   if (usage === null) {
@@ -68,7 +98,10 @@ export function ThreadDetailsContextSummary({
       >
         <div className="flex h-7 items-center justify-between gap-2 px-2.5 text-xs">
           <span className="font-medium">Context</span>
-          <span className="text-muted-foreground">Not reported yet</span>
+          <span className="flex items-center gap-2 text-muted-foreground">
+            Not reported yet
+            <CompactButton compact={compact} />
+          </span>
         </div>
       </ThreadDetailsSection>
     );
@@ -97,9 +130,10 @@ export function ThreadDetailsContextSummary({
       <div className="flex flex-col gap-1.5 px-2.5 pt-1 text-xs">
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium">Context</span>
-          <span className="text-muted-foreground tabular-nums">
+          <span className="flex items-center gap-2 text-muted-foreground tabular-nums">
             {tokens(usage.usedTokens)}
             {maxTokens !== null ? ` / ${tokens(maxTokens)}` : ""}
+            <CompactButton compact={compact} />
           </span>
         </div>
         <div className="flex items-baseline justify-between gap-2">

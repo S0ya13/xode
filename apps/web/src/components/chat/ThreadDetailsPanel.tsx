@@ -28,7 +28,11 @@ import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
 import { ThreadDetailsUsage, type ThreadDetailsUsageInput } from "./ThreadDetailsUsage";
 import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
-import { ThreadDetailsActivity, ThreadDetailsContextSummary } from "./ThreadDetailsActivity";
+import {
+  ThreadDetailsActivity,
+  ThreadDetailsContextSummary,
+  type ThreadDetailsCompact,
+} from "./ThreadDetailsActivity";
 import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
 import { useClientSettings } from "../../hooks/useSettings";
 import { useProject, useServerConfigs } from "../../state/entities";
@@ -88,6 +92,7 @@ interface ThreadDetailsPanelProps extends Pick<
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   usage: ThreadDetailsUsageInput;
+  compact?: ThreadDetailsCompact;
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -178,7 +183,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           <>
             <div className="group/details-items">
               {visible.context ? (
-                <ThreadDetailsContextSummary usage={props.usage.contextWindow ?? null} />
+                <ThreadDetailsContextSummary
+                  usage={props.usage.contextWindow ?? null}
+                  compact={props.compact}
+                />
               ) : null}
 
               {!props.draftId ? (

@@ -3963,6 +3963,7 @@ export default function ChatView(props: ChatViewProps) {
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
                     contextWindow: activeContextWindow,
                   }}
+                  compact={{ onCompact: onComposerCompactContextStable, disabled: compactDisabled }}
                 />
 
                 <PullRequestThreadDialogHost
