@@ -82,7 +82,10 @@ export function ThreadDetailsUsage({
   );
 }
 
-/** The thread's context window. The bar fills as context is used; the tick marks auto-compaction. */
+/**
+ * The thread's context window. The bar fills as context is used; the tick marks auto-compaction.
+ * @public Fork: the card shows ThreadDetailsContextSummary instead.
+ */
 export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowSnapshot }) {
   const maxTokens = usage.maxTokens != null && usage.maxTokens > 0 ? usage.maxTokens : null;
   const used =

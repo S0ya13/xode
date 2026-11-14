@@ -26,12 +26,9 @@ import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { ThreadServersPanel } from "./ThreadServersPanel";
-import {
-  ThreadDetailsContext,
-  ThreadDetailsUsage,
-  type ThreadDetailsUsageInput,
-} from "./ThreadDetailsUsage";
+import { ThreadDetailsUsage, type ThreadDetailsUsageInput } from "./ThreadDetailsUsage";
 import { ThreadDetailsItemsMenuItems } from "./ThreadDetailsItemsMenu";
+import { ThreadDetailsActivity, ThreadDetailsContextSummary } from "./ThreadDetailsActivity";
 import { resolveThreadDetailsVisibility, THREAD_DETAILS_ITEMS } from "./threadDetailsItems";
 import { useClientSettings } from "../../hooks/useSettings";
 import { useProject, useServerConfigs } from "../../state/entities";
@@ -180,11 +177,25 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         return (
           <>
             <div className="group/details-items">
+              {visible.context && props.usage.contextWindow ? (
+                <ThreadDetailsContextSummary usage={props.usage.contextWindow} />
+              ) : null}
+
+              {!props.draftId ? (
+                <ThreadDetailsActivity
+                  threadRef={activeThreadRef}
+                  show={{
+                    turn: visible.turnStats,
+                    totals: visible.threadTotals && density === "full",
+                    subagents: visible.subagents && density !== "essential",
+                  }}
+                />
+              ) : null}
+
               {show.environment || show.openIn || show.scripts ? (
                 <ThreadDetailsSection
                   headingId="thread-details-workspace-heading"
                   title="Workspace"
-                  separated={false}
                   showHeading={false}
                 >
                   <div className="flex flex-col">
@@ -285,10 +296,6 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               ) : null}
 
               {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
-
-              {visible.context && props.usage.contextWindow ? (
-                <ThreadDetailsContext usage={props.usage.contextWindow} />
-              ) : null}
 
               {/* Shown only when no section above has content, so an emptied card can be refilled. */}
               <div className="p-2 group-has-[>section>:last-child:not(:empty)]/details-items:hidden">
