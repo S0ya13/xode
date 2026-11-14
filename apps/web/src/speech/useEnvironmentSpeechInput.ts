@@ -103,6 +103,8 @@ type HookInput = {
     | {
         readonly readStoredText: () => string | null;
         readonly commitStoredText: (text: string) => void;
+        /** Returns a check that the stored draft still holds what it held when Send was pressed. */
+        readonly captureUnchanged: () => () => boolean;
         readonly open: () => void;
       }
     | undefined;
@@ -287,16 +289,31 @@ export function useEnvironmentSpeechInput(input: HookInput) {
       pending.submit(pending.text);
   }, [state, input.ownerKey, input.disabled]);
 
-  const submitAfterDictation = useStableCallback((submit: (text: string) => void) => {
-    if (latestRef.current.input.disabled || state.phase === "preparing") return;
-    if (!session || !voiceInputBlocksSubmission(state)) {
-      submit(latestRef.current.input.readDraft().text);
-      return;
-    }
-    if (pendingSubmissionRef.current) return;
-    pendingSubmissionRef.current = { ownerKey: latestRef.current.input.ownerKey, submit };
-    if (session.state.phase === "recording") void session.stop();
-  });
+  /**
+   * With `cancel`, the send is bound to this draft: it goes out once the transcript lands even if
+   * the editor shows another thread by then, and `cancel` runs if it never does.
+   */
+  const submitAfterDictation = useStableCallback(
+    (submit: (text: string) => void, cancel?: () => void) => {
+      const current = latestRef.current.input;
+      if (current.disabled || state.phase === "preparing") {
+        cancel?.();
+        return;
+      }
+      if (!session || !voiceInputBlocksSubmission(state)) {
+        submit(current.readDraft().text);
+        return;
+      }
+      if (cancel) {
+        const unchanged = current.persistentDraft?.captureUnchanged() ?? (() => true);
+        if (!session.queueSubmission(current.ownerKey, { submit, cancel, unchanged })) cancel();
+        return;
+      }
+      if (pendingSubmissionRef.current) return;
+      pendingSubmissionRef.current = { ownerKey: current.ownerKey, submit };
+      if (session.state.phase === "recording") void session.stop();
+    },
+  );
 
   const createTarget = (): VoiceInputTarget => {
     const owner = latestRef.current.input.ownerKey;
@@ -308,6 +325,7 @@ export function useEnvironmentSpeechInput(input: HookInput) {
       label: latestRef.current.input.label ?? null,
       persistent: persistent !== null,
       open: persistent?.open ?? null,
+      commitStoredDraft: persistent ? (text) => persistent.commitStoredText(text) : null,
       readDraft: () => {
         if (live()) return latestRef.current.input.readDraft();
         const text = persistent?.readStoredText();

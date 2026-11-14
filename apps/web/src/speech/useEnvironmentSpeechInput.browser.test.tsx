@@ -267,6 +267,7 @@ function Probe(props: {
           commitStoredText: (text) => {
             mocks.storedDraft = text;
           },
+          captureUnchanged: () => () => true,
           open: () => {},
         }
       : undefined,

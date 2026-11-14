@@ -465,6 +465,7 @@ export interface ChatComposerProps {
     e?: { preventDefault: () => void },
     dispatchMode?: ComposerDispatchMode,
     submissionIntent?: ComposerSubmissionIntent,
+    dictation?: Promise<string | null>,
   ) => void;
   onResume: () => void;
   onInterrupt: () => void;
@@ -1832,6 +1833,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : {
           readStoredText: () => readComposerDraftPrompt(composerDraftTarget),
           commitStoredText: (text) => setComposerDraftPrompt(composerDraftTarget, text),
+          captureUnchanged: () => {
+            const captured = getComposerDraft(composerDraftTarget);
+            return () => {
+              const current = getComposerDraft(composerDraftTarget);
+              return (
+                (current?.prompt ?? "") === (captured?.prompt ?? "") &&
+                (current?.images.length ?? 0) === (captured?.images.length ?? 0) &&
+                !current?.images.some((image, index) => image.id !== captured?.images[index]?.id) &&
+                (current?.files.length ?? 0) === (captured?.files.length ?? 0) &&
+                !current?.files.some((file, index) => file.id !== captured?.files[index]?.id)
+              );
+            };
+          },
           open: () =>
             void (typeof composerDraftTarget === "string"
               ? navigate({
@@ -2134,7 +2148,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     if (activePendingProgress) {
       return activePendingProgress.isLastQuestion && Boolean(activePendingResolvedAnswers);
     }
-    return composerSendState.hasSendableContent;
+    return composerSendState.hasSendableContent || voiceInputActive;
   };
 
   const submitComposerRef = useRef<
@@ -2145,11 +2159,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     dispatchMode?: ComposerDispatchMode,
     submissionIntent?: ComposerSubmissionIntent,
   ) => {
-    if (voiceInputActive) {
-      event?.preventDefault();
-      submitAfterDictation(() => submitComposerRef.current(dispatchMode, submissionIntent));
-      return false;
-    }
     if (submissionBlocked || !readEnvironmentScope(environmentId, AuthOrchestrationOperateScope)) {
       event?.preventDefault();
       return false;
@@ -2173,6 +2182,41 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         title: "Still bringing attached context into this message.",
         description: "Send again once its chip resolves.",
       });
+      return false;
+    }
+    if (voiceInputActive) {
+      event?.preventDefault();
+      if (activePendingProgress) {
+        submitAfterDictation(() => submitComposerRef.current(dispatchMode, submissionIntent));
+        return false;
+      }
+      const transcript = new Promise<string | null>((resolve) => {
+        submitAfterDictation(
+          (text) => {
+            resolve(text);
+            if (
+              composerDraftTargetKeyRef.current === composerDraftTargetKey &&
+              composerFormRef.current?.isConnected
+            ) {
+              onTypingGuardSend();
+              if (shouldBlurMobileComposerOnSubmit()) blurMobileComposerAfterSend();
+            }
+          },
+          () => resolve(null),
+        );
+      });
+      onSend(
+        undefined,
+        dispatchMode ??
+          resolveComposerDispatchMode({
+            running: phase === "running" || phase === "connecting",
+            alternateModifier: false,
+            activeTurnDefault: followUpBehavior,
+            canSteer,
+          }),
+        submissionIntent,
+        transcript,
+      );
       return false;
     }
     // An empty draft has nothing to send; Enter does what the Resume thread button does.
@@ -2211,7 +2255,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     return true;
   };
   const submitComposerStable = useStableCallback(submitComposer);
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes the committed submission handler to the asynchronous dictation completion
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- question submissions need the answers from the render that committed their transcript
   useLayoutEffect(() => {
     submitComposerRef.current = (mode, intent) => submitComposerStable(undefined, mode, intent);
   }, [submitComposerStable]);

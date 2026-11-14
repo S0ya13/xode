@@ -52,6 +52,8 @@ export type VoiceInputTarget = {
   readonly open: (() => void) | null;
   readonly readDraft: () => DraftInput | null;
   readonly commitDraft: (text: string, selection: DraftInput["selection"]) => void;
+  /** Writes the stored draft directly, so a confirmed send can finish after its editor has gone. */
+  readonly commitStoredDraft: ((text: string) => void) | null;
   readonly readContext: () => VoiceRecordingContext;
 };
 
@@ -72,6 +74,16 @@ type SessionKey = {
   readonly grantId: string;
   readonly cloudProvider: CloudSpeechProvider | undefined;
   readonly cloudModel: CloudSpeechModelId | undefined;
+};
+
+/** A Send pressed during dictation; it goes out with the transcript, or is cancelled. */
+type VoiceSubmission = {
+  readonly ownerKey: string;
+  readonly submit: (text: string) => void;
+  readonly cancel: () => void;
+  /** False once the draft changed after Send, so the transcript must not be sent with it. */
+  readonly unchanged: () => boolean;
+  text?: string;
 };
 
 const SILENT_ACTIVITY: VoiceInputSessionActivity = { level: 0, preview: null };
@@ -96,6 +108,7 @@ export class VoiceInputSession {
   readonly key: SessionKey;
   private readonly controller: VoiceInputController;
   private target: VoiceInputTarget | null = null;
+  private submission: VoiceSubmission | null = null;
   private snapshot: VoiceInputSessionSnapshot = {
     state: IDLE_VOICE_STATE,
     target: null,
@@ -207,11 +220,35 @@ export class VoiceInputSession {
         }),
       readDraft: (): VoiceDraftSnapshot | null => {
         const target = this.target;
+        const submission = this.submission;
+        // A draft edited after Send no longer holds what was confirmed; keep the audio to retry.
+        if (submission?.ownerKey === target?.ownerKey && submission && !submission.unchanged())
+          return null;
         const draft = target?.readDraft();
         return target && draft ? { ownerKey: target.ownerKey, ...draft } : null;
       },
-      commitDraft: (text, selection) => this.target?.commitDraft(text, selection),
+      commitDraft: (text, selection) => {
+        const target = this.target;
+        const submission = this.submission;
+        if (!target) return;
+        if (submission?.ownerKey === target.ownerKey && target.commitStoredDraft) {
+          target.commitStoredDraft(text);
+          submission.text = text;
+          return;
+        }
+        target.commitDraft(text, selection);
+      },
       onStateChange: (state) => {
+        if (state.phase === "idle") this.settleSubmission(true);
+        if (state.phase === "error") {
+          if (this.submission)
+            toastManager.add({
+              type: "error",
+              title: "Voice message was not sent",
+              description: state.error,
+            });
+          this.settleSubmission(false);
+        }
         if (this.disposed) return;
         const recordingStartedAt =
           state.phase !== "recording" ? null : (this.snapshot.recordingStartedAt ?? Date.now());
@@ -269,6 +306,25 @@ export class VoiceInputSession {
     this.controller.skipPostProcessing();
   }
 
+  /**
+   * Sends the transcript once it lands in `ownerKey`'s stored draft, even if its editor has moved
+   * on by then. False when there is no dictation to wait for or its draft cannot outlive the editor.
+   */
+  queueSubmission(ownerKey: string, submission: Omit<VoiceSubmission, "ownerKey">): boolean {
+    const state = this.controller.currentState;
+    if (
+      this.disposed ||
+      this.submission ||
+      this.target?.ownerKey !== ownerKey ||
+      !this.target.commitStoredDraft ||
+      !voiceInputBlocksSubmission(state)
+    )
+      return false;
+    this.submission = { ...submission, ownerKey };
+    if (state.phase === "recording") void this.controller.stop();
+    return true;
+  }
+
   /** The editor for `ownerKey` now shows another draft; only a persistent target keeps going. */
   ownerChanged(ownerKey: string): void {
     if (this.target?.ownerKey !== ownerKey || this.target.persistent) return;
@@ -277,9 +333,18 @@ export class VoiceInputSession {
 
   dispose(): void {
     this.disposed = true;
+    this.settleSubmission(false);
     this.controller.dispose();
     this.listeners.clear();
     this.activityListeners.clear();
+  }
+
+  private settleSubmission(delivered: boolean): void {
+    const submission = this.submission;
+    this.submission = null;
+    if (!submission) return;
+    if (delivered && submission.text !== undefined) submission.submit(submission.text);
+    else submission.cancel();
   }
 
   private publish(snapshot: VoiceInputSessionSnapshot): void {
