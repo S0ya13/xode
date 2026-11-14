@@ -11,18 +11,37 @@ const servers = THREAD_DETAILS_ITEMS.find((item) => item.id === "servers")!;
 
 describe("thread details items", () => {
   it.each([
-    { legacy: false, items: {}, usage: false, context: false },
+    { legacy: false, items: {}, usage: false, context: true },
     { legacy: true, items: {}, usage: true, context: true },
     { legacy: true, items: { usage: false }, usage: false, context: true },
-    { legacy: false, items: { usage: true, retired: false }, usage: true, context: false },
-  ])("resolves Usage and Context from overrides and the retired Labs flag: %o", (row) => {
+    { legacy: false, items: { usage: true, context: false }, usage: true, context: false },
+  ])(
+    "resolves Usage from overrides and the retired Labs flag, Context from overrides: %o",
+    (row) => {
+      const visibility = resolveThreadDetailsVisibility({
+        threadDetailsItems: row.items,
+        threadDetailsUsageEnabled: row.legacy,
+      });
+      expect(visibility.usage).toBe(row.usage);
+      expect(visibility.context).toBe(row.context);
+      expect(visibility.servers).toBe(true);
+    },
+  );
+
+  it("leads with activity and hides workspace rows by default", () => {
     const visibility = resolveThreadDetailsVisibility({
-      threadDetailsItems: row.items,
-      threadDetailsUsageEnabled: row.legacy,
+      threadDetailsItems: {},
+      threadDetailsUsageEnabled: false,
     });
-    expect(visibility.usage).toBe(row.usage);
-    expect(visibility.context).toBe(row.context);
-    expect(visibility.servers).toBe(true);
+    expect(visibility).toMatchObject({
+      context: true,
+      turnStats: true,
+      threadTotals: true,
+      subagents: true,
+      environment: false,
+      openIn: false,
+      scripts: false,
+    });
   });
 
   it("stores only choices that differ from the default", () => {

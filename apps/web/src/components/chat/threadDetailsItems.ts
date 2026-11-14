@@ -1,10 +1,15 @@
 import type { ClientSettings } from "@t3tools/contracts";
 
 // Ids are stored in client settings, so never rename one.
+// Fork: context, turn stats, thread totals and subagents lead the card; workspace rows start hidden.
 export const THREAD_DETAILS_ITEMS = [
-  { id: "environment", label: "Environment and worktree", defaultVisible: true },
-  { id: "openIn", label: "Open in editor", defaultVisible: true },
-  { id: "scripts", label: "Project scripts", defaultVisible: true },
+  { id: "context", label: "Context window", defaultVisible: true },
+  { id: "turnStats", label: "Last turn stats", defaultVisible: true },
+  { id: "threadTotals", label: "Thread totals", defaultVisible: true },
+  { id: "subagents", label: "Subagents", defaultVisible: true },
+  { id: "environment", label: "Environment and worktree", defaultVisible: false },
+  { id: "openIn", label: "Open in editor", defaultVisible: false },
+  { id: "scripts", label: "Project scripts", defaultVisible: false },
   { id: "branch", label: "Branch and pull request", defaultVisible: true },
   { id: "gitActions", label: "Git actions", defaultVisible: true },
   { id: "changes", label: "Changes", defaultVisible: true },
@@ -13,7 +18,6 @@ export const THREAD_DETAILS_ITEMS = [
   { id: "lineage", label: "Lineage", defaultVisible: true },
   { id: "sideChats", label: "Side chats", defaultVisible: true },
   { id: "usage", label: "Usage limits", defaultVisible: false },
-  { id: "context", label: "Context window", defaultVisible: false },
 ] as const;
 
 export type ThreadDetailsItemId = (typeof THREAD_DETAILS_ITEMS)[number]["id"];
@@ -27,9 +31,7 @@ type ThreadDetailsItemSettings = Pick<
 
 // People who turned on the retired Labs toggle keep Usage and Context until they change them here.
 function defaultVisible(item: ThreadDetailsItem, settings: ThreadDetailsItemSettings) {
-  return item.id === "usage" || item.id === "context"
-    ? settings.threadDetailsUsageEnabled
-    : item.defaultVisible;
+  return item.id === "usage" ? settings.threadDetailsUsageEnabled : item.defaultVisible;
 }
 
 export function resolveThreadDetailsVisibility(

@@ -5,6 +5,7 @@ import {
   type ScopedThreadRef,
   type ThreadPullRequestLink,
 } from "@t3tools/contracts";
+import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 import { AsyncResult, Atom } from "effect/reactivity";
 import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -82,6 +83,7 @@ vi.mock(import("~/state/vcs"), async (importOriginal) => {
 });
 
 import { render } from "../../../test/render";
+import { __setClientSettingsForTests } from "~/hooks/useSettings";
 import { useRightPanelStore } from "../../rightPanelStore";
 import { PopoverCreateHandle } from "../ui/popover";
 import { ChatCanvasContext } from "./ChatCanvasContext";
@@ -116,6 +118,11 @@ function setup(input: {
   state.folder = input.folder;
   state.pullRequests = input.pullRequests ?? [];
   useRightPanelStore.setState({ threadPanelVisibilityByThreadKey: {} });
+  // The fork hides workspace rows by default; these cases use the Workspace region.
+  __setClientSettingsForTests({
+    ...DEFAULT_CLIENT_SETTINGS,
+    threadDetailsItems: { environment: true },
+  });
   const anchor = document.createElement("div");
   document.body.append(anchor);
   return {
