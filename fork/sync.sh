@@ -31,6 +31,8 @@ apply_staged() {
 }
 
 LOCK="$REPO/.git/fork-sync.lock"
+# A sync killed mid-build (reboot, logout) never runs its trap; no sync takes 3 hours.
+find "$LOCK" -maxdepth 0 -mmin +180 -exec rmdir {} \; 2>/dev/null || true
 mkdir "$LOCK" 2>/dev/null || { log "Another sync is running"; exit 0; }
 trap 'rmdir "$LOCK"' EXIT
 
@@ -46,7 +48,8 @@ if git merge-base --is-ancestor upstream/main HEAD && [[ "${1:-}" != --force ]];
 fi
 
 before="$(git rev-parse HEAD)"
-if ! git merge -q --no-edit upstream/main; then
+# launchd has no 1Password agent session to sign with, and a failed signature reads as a conflict.
+if ! git -c commit.gpgsign=false merge -q --no-edit upstream/main; then
   git merge --abort
   notify "Merge conflict with upstream: resolve it in $REPO"
   exit 1
