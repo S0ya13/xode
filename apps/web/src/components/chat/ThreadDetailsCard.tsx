@@ -18,6 +18,7 @@ import {
 } from "./threadDetailsCardLayout";
 import { observeResize } from "../../lib/observeResize";
 import { requestWorkspaceFocus } from "../../lib/workspaceFocus";
+import { usePanelAnimationSettings, usePanelPresence } from "../../panelAnimations";
 
 export function ThreadDetailsCard({
   threadRef,
@@ -47,6 +48,16 @@ export function ThreadDetailsCard({
   const popoverOpen = useRightPanelStore((state) =>
     selectThreadPanelOpen(state.threadPanelVisibilityByThreadKey, threadRef, "popover"),
   );
+  const panelAnimations = usePanelAnimationSettings();
+  // Keeps the inline card mounted through its exit transition.
+  const inlinePresence = usePanelPresence(
+    placement !== null && inlineOpen,
+    null,
+    panelAnimations.active,
+    `${threadRef.environmentId}:${threadRef.threadId}`,
+    panelAnimations.durationMs,
+  );
+  const inlineClosing = !inlineOpen;
   const measurementKey = `${threadRef.environmentId}:${threadRef.threadId}:${preferredPlacement?.width ?? "popup"}:${contentKey}`;
   const [measurements, setMeasurements] = useState({
     key: measurementKey,
@@ -146,14 +157,18 @@ export function ThreadDetailsCard({
         useRightPanelStore.getState().setThreadPanelOpen(threadRef, "popover", open);
       }}
     >
-      {placement && inlineOpen ? (
+      {placement && inlinePresence.present ? (
         <aside
           {...detailsArea}
           data-workspace-focus-key={`details:${threadRef.environmentId}:${threadRef.threadId}`}
+          inert={inlineClosing}
           // Skip the return transition to avoid overlapping the rising preview.
           className={cn(
-            "absolute z-20",
-            topInset > 0 && "transition-[top] duration-150 ease-out motion-reduce:transition-none",
+            "absolute z-20 [[data-panel-animations=true]_&]:motion-safe:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:motion-safe:ease-out [[data-panel-animations=true]_&]:starting:translate-x-3 [[data-panel-animations=true]_&]:starting:opacity-0",
+            topInset > 0
+              ? "transition-[top] duration-150 ease-out motion-reduce:transition-none [[data-panel-animations=true]_&]:motion-safe:transition-[top,opacity,translate]"
+              : "[[data-panel-animations=true]_&]:motion-safe:transition-[opacity,translate]",
+            inlineClosing && "translate-x-3 opacity-0",
           )}
           style={{
             right: placement.right,
