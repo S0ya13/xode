@@ -92,19 +92,38 @@ export function buildBackdropCells(
   return cells;
 }
 
-/** How one cell looks at `timeMs`, or null when it stays empty. */
-export function paintBackdropCell(cell: BackdropCell, timeMs: number): BackdropCellPaint | null {
-  const phase = (timeMs / WAVE_PERIOD_MS) % 1;
-  let offset = Math.abs(cell.along - phase);
+/** Where the animation is: the wave's place along the trefoil and the clouds' drift. */
+export interface BackdropFrame {
+  /** 0 to 1 along the trefoil. */
+  readonly phase: number;
+  /** Seconds of cloud drift. */
+  readonly seconds: number;
+  /** Weight of a second wave half a loop behind the first, 0 to 1. */
+  readonly echo: number;
+}
+
+const waveAt = (along: number, phase: number) => {
+  let offset = Math.abs(along - (((phase % 1) + 1) % 1));
   offset = Math.min(offset, 1 - offset);
-  // A bright band runs along the trefoil.
-  const wave = Math.exp(-(offset * offset) / (2 * WAVE_WIDTH * WAVE_WIDTH));
+  return Math.exp(-(offset * offset) / (2 * WAVE_WIDTH * WAVE_WIDTH));
+};
+
+/** How one cell looks in `frame`, or null when it stays empty. */
+export function paintBackdropCell(
+  cell: BackdropCell,
+  frame: BackdropFrame,
+): BackdropCellPaint | null {
+  // Bright bands run along the trefoil.
+  const wave = Math.max(
+    waveAt(cell.along, frame.phase),
+    frame.echo * waveAt(cell.along, frame.phase + 0.5),
+  );
   const knot = cell.core * (0.5 + 0.5 * wave) + cell.halo * 0.16;
   if (knot > 0.06) {
     return { alpha: Math.min(1, knot), tone: cell.core > 0.3 ? "accent" : "ink" };
   }
   // Slow clouds drift along the sides; their density decides which cells show.
-  const seconds = timeMs / 1000;
+  const { seconds } = frame;
   const cloud =
     0.5 +
     0.25 * Math.sin(cell.x * 0.018 + seconds * 0.22) * Math.sin(cell.y * 0.028 - seconds * 0.15) +
@@ -115,6 +134,48 @@ export function paintBackdropCell(cell: BackdropCell, timeMs: number): BackdropC
   }
   if (cell.seed > 0.985) return { alpha: 0.08, tone: "ink" };
   return null;
+}
+
+/** What the thread is doing, which sets how the backdrop moves. */
+export type BackdropMode = "hero" | "idle" | "working" | "attention";
+
+export interface BackdropTuning {
+  /** Overall opacity. */
+  readonly strength: number;
+  /** Wave speed: 1 runs the loop once in nine seconds. */
+  readonly speed: number;
+  /** Chance per frame that a cell changes its character. */
+  readonly churn: number;
+  readonly echo: number;
+  /** 0 to 1: the trefoil breathes in the warning color while the agent waits on the user. */
+  readonly attention: number;
+}
+
+export const BACKDROP_TUNING: Record<BackdropMode, BackdropTuning> = {
+  hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0 },
+  idle: { strength: 0.2, speed: 0.6, churn: 0.006, echo: 0, attention: 0 },
+  working: { strength: 0.45, speed: 3, churn: 0.05, echo: 1, attention: 0 },
+  attention: { strength: 0.4, speed: 0.4, churn: 0.01, echo: 0, attention: 1 },
+};
+
+export const BACKDROP_WAVE_PERIOD_MS = WAVE_PERIOD_MS;
+const EASE_MS = 450;
+
+/** Moves `current` toward `target` over about half a second, so mode changes blend. */
+export function easeBackdropTuning(
+  current: BackdropTuning,
+  target: BackdropTuning,
+  elapsedMs: number,
+): BackdropTuning {
+  const k = 1 - Math.exp(-Math.max(0, elapsedMs) / EASE_MS);
+  const ease = (from: number, to: number) => from + (to - from) * k;
+  return {
+    strength: ease(current.strength, target.strength),
+    speed: ease(current.speed, target.speed),
+    churn: ease(current.churn, target.churn),
+    echo: ease(current.echo, target.echo),
+    attention: ease(current.attention, target.attention),
+  };
 }
 
 export interface BackdropClearRect {

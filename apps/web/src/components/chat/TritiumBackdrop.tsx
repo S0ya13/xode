@@ -4,49 +4,67 @@ import { observeResize } from "../../lib/observeResize";
 import {
   BACKDROP_CELL_HEIGHT,
   BACKDROP_CHARS,
+  BACKDROP_TUNING,
+  BACKDROP_WAVE_PERIOD_MS,
   backdropClearance,
   buildBackdropCells,
+  easeBackdropTuning,
   paintBackdropCell,
   type BackdropCell,
   type BackdropClearRect,
+  type BackdropMode,
 } from "./tritiumBackdrop.logic";
 
-const FRAME_MS = 66;
+const FRAME_MS = 50;
+// Reduced motion keeps the trefoil still and only follows mode changes.
+const REDUCED_FRAME_MS = 500;
 const COLOR_REFRESH_MS = 1000;
-const CHAR_CHANGE_RATE = 0.012;
+const BREATH_MS = 1800;
 
 const randomChar = () => BACKDROP_CHARS[Math.floor(Math.random() * BACKDROP_CHARS.length)]!;
 
+const readMode = (canvas: HTMLCanvasElement): BackdropMode => {
+  const mode = canvas.dataset.tritiumBackdrop;
+  return mode === "hero" || mode === "working" || mode === "attention" ? mode : "idle";
+};
+
 /**
- * Fork: the Tritium trefoil in drifting characters behind the chat. `dim` fades it behind a
- * conversation; a new thread shows it in full.
+ * Fork: the Tritium trefoil in drifting characters behind the chat. It runs in full on a new
+ * thread, fades behind a conversation, races while the agent works, and breathes in the warning
+ * color while the agent waits on the user. Mode changes blend instead of jumping.
  */
-export function TritiumBackdrop({ dim }: { readonly dim: boolean }) {
+export function TritiumBackdrop({ mode }: { readonly mode: BackdropMode }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the canvas drawn: a resize observer sizes it and animation frames paint it until unmount or a strength change.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the canvas drawn: a resize observer sizes it and animation frames paint it until unmount; the mode is read from its data attribute each frame.
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
     if (!canvas || !context) return;
-    const strength = dim ? 0.2 : 1;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let cells: BackdropCell[] = [];
     let chars: string[] = [];
     let width = 0;
     let height = 0;
-    // The class resolves theme colors: text is the ink, the border the accent.
+    // The class resolves theme colors: text is the ink, the border the accent, the outline the
+    // warning color.
     let ink = "";
     let accent = "";
+    let warning = "";
     let colorsReadAt = -Infinity;
     // Text marked `data-backdrop-clear` keeps the characters behind it faint, so it stays readable.
     let clearRects: BackdropClearRect[] = [];
+    let tuning = BACKDROP_TUNING[readMode(canvas)];
+    let phase = 0;
+    let seconds = 0;
+    let lastFrameAt: number | null = null;
 
     const draw = (now: number) => {
       if (now - colorsReadAt > COLOR_REFRESH_MS) {
         const style = getComputedStyle(canvas);
         ink = style.color;
         accent = style.borderTopColor;
+        warning = style.outlineColor;
         const origin = canvas.getBoundingClientRect();
         clearRects = Array.from(document.querySelectorAll("[data-backdrop-clear]"), (element) => {
           const range = document.createRange();
@@ -61,18 +79,47 @@ export function TritiumBackdrop({ dim }: { readonly dim: boolean }) {
         }).filter((rect) => rect.right > rect.left);
         colorsReadAt = now;
       }
+      const elapsed = lastFrameAt === null ? 0 : now - lastFrameAt;
+      lastFrameAt = now;
+      const target = BACKDROP_TUNING[readMode(canvas)];
+      tuning = reduceMotion ? target : easeBackdropTuning(tuning, target, elapsed);
+      if (!reduceMotion) {
+        phase = (phase + (elapsed / BACKDROP_WAVE_PERIOD_MS) * tuning.speed) % 1;
+        seconds += (elapsed / 1000) * (0.5 + 0.5 * tuning.speed);
+      }
+      const breath = reduceMotion
+        ? 1
+        : 1 + 0.35 * tuning.attention * Math.sin((now / BREATH_MS) * Math.PI * 2);
+      const frame = { phase, seconds, echo: tuning.echo };
       context.clearRect(0, 0, width, height);
       for (let index = 0; index < cells.length; index++) {
-        const paint = paintBackdropCell(cells[index]!, now);
-        if (!paint) continue;
-        if (!reduceMotion && Math.random() < CHAR_CHANGE_RATE) chars[index] = randomChar();
         const cell = cells[index]!;
-        context.globalAlpha =
+        const paint = paintBackdropCell(cell, frame);
+        if (!paint) continue;
+        if (!reduceMotion && Math.random() < tuning.churn) chars[index] = randomChar();
+        const alpha =
           paint.alpha *
-          strength *
+          tuning.strength *
+          breath *
           (clearRects.length > 0 ? backdropClearance(cell.x, cell.y, clearRects) : 1);
-        context.fillStyle = paint.tone === "accent" ? accent : ink;
-        context.fillText(chars[index]!, cell.x, cell.y);
+        const char = chars[index]!;
+        if (paint.tone === "ink") {
+          context.globalAlpha = Math.min(1, alpha);
+          context.fillStyle = ink;
+          context.fillText(char, cell.x, cell.y);
+          continue;
+        }
+        // The accent turns to the warning color as attention rises; mid-blend draws both.
+        if (tuning.attention < 0.99) {
+          context.globalAlpha = Math.min(1, alpha * (1 - tuning.attention));
+          context.fillStyle = accent;
+          context.fillText(char, cell.x, cell.y);
+        }
+        if (tuning.attention > 0.01) {
+          context.globalAlpha = Math.min(1, alpha * tuning.attention);
+          context.fillStyle = warning;
+          context.fillText(char, cell.x, cell.y);
+        }
       }
       context.globalAlpha = 1;
     };
@@ -96,28 +143,27 @@ export function TritiumBackdrop({ dim }: { readonly dim: boolean }) {
 
     resize();
     const stopResize = observeResize(canvas, resize);
-    if (reduceMotion) return stopResize;
-
-    let frame = 0;
+    const frameMs = reduceMotion ? REDUCED_FRAME_MS : FRAME_MS;
+    let frameRequest = 0;
     let drawnAt = 0;
     const tick = (now: number) => {
-      frame = window.requestAnimationFrame(tick);
-      if (now - drawnAt < FRAME_MS) return;
+      frameRequest = window.requestAnimationFrame(tick);
+      if (now - drawnAt < frameMs) return;
       drawnAt = now;
       draw(now);
     };
-    frame = window.requestAnimationFrame(tick);
+    frameRequest = window.requestAnimationFrame(tick);
     return () => {
-      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(frameRequest);
       stopResize();
     };
-  }, [dim]);
+  }, []);
 
   return (
     <canvas
       ref={canvasRef}
       aria-hidden
-      data-tritium-backdrop={dim ? "dim" : "full"}
+      data-tritium-backdrop={mode}
       className="tritium-backdrop pointer-events-none absolute inset-0 -z-10 size-full"
     />
   );

@@ -3399,7 +3399,21 @@ export default function ChatView(props: ChatViewProps) {
 
         {/* Fork: isolate keeps the backdrop above the page background and under the chat. */}
         <div className="relative isolate flex min-h-0 min-w-0 flex-1">
-          {embedded ? null : <TritiumBackdrop dim={!isDraftHeroState} />}
+          {embedded ? null : (
+            <TritiumBackdrop
+              mode={
+                isDraftHeroState
+                  ? "hero"
+                  : activePendingApproval !== null ||
+                      activePendingUserInput !== null ||
+                      activeThreadShell?.hasPendingUserInput === true
+                    ? "attention"
+                    : isWorking
+                      ? "working"
+                      : "idle"
+              }
+            />
+          )}
           <ThreadFindCanvas
             findOptions={{
               skills: timelineSkills,

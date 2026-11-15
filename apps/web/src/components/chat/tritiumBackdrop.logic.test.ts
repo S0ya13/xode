@@ -3,8 +3,10 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   BACKDROP_CELL_HEIGHT,
   BACKDROP_CELL_WIDTH,
+  BACKDROP_TUNING,
   backdropClearance,
   buildBackdropCells,
+  easeBackdropTuning,
   paintBackdropCell,
 } from "./tritiumBackdrop.logic";
 
@@ -27,16 +29,17 @@ describe("buildBackdropCells", () => {
 
 describe("paintBackdropCell", () => {
   const base = { x: 300, y: 200, core: 0, halo: 0, side: 0, along: 0, seed: 0.5 };
+  const still = { phase: 0, seconds: 0, echo: 0 };
 
   it("lights a cell on the line in the accent tone", () => {
-    expect(paintBackdropCell({ ...base, core: 1, halo: 1 }, 0)).toEqual({
+    expect(paintBackdropCell({ ...base, core: 1, halo: 1 }, still)).toEqual({
       alpha: 1,
       tone: "accent",
     });
   });
 
   it("leaves a middle cell off the line empty", () => {
-    expect(paintBackdropCell(base, 0)).toBeNull();
+    expect(paintBackdropCell(base, still)).toBeNull();
   });
 });
 
@@ -47,5 +50,16 @@ describe("backdropClearance", () => {
     expect(backdropClearance(200, 120, [rect])).toBeCloseTo(0.08);
     expect(backdropClearance(200, 300, [rect])).toBe(1);
     expect(backdropClearance(200, 300, [])).toBe(1);
+  });
+});
+
+describe("easeBackdropTuning", () => {
+  it("blends toward the new mode and settles on it", () => {
+    const { idle, working } = BACKDROP_TUNING;
+    const halfway = easeBackdropTuning(idle, working, 450);
+    expect(halfway.speed).toBeGreaterThan(idle.speed);
+    expect(halfway.speed).toBeLessThan(working.speed);
+    expect(easeBackdropTuning(idle, working, 10_000).speed).toBeCloseTo(working.speed);
+    expect(easeBackdropTuning(idle, working, 0)).toEqual(idle);
   });
 });
