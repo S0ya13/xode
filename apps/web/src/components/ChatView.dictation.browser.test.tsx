@@ -205,9 +205,15 @@ it.each([
   }
   resolveResponse(Response.json({ text: "the login bug" }));
   if (scenario === "upload") {
-    // The fake server holds asset URLs until asked; the send waits for the uploaded file's.
+    // The fake server holds asset URLs until asked; the send waits for the uploaded file's,
+    // and may ask again before it dispatches.
     await vi.waitFor(() => expect(hasPendingAssetUrl()).toBe(true));
-    await act(answerAssetUrls);
+    await vi.waitFor(async () => {
+      if (hasPendingAssetUrl()) await act(answerAssetUrls);
+      expect(dispatchedCommands().some((command) => command.type === "message.dispatch")).toBe(
+        true,
+      );
+    });
   }
   if (scenario === "attachment-change" || scenario === "prompt-change") {
     await expect
