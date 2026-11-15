@@ -109,6 +109,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   open?: boolean;
   popupAlign?: "start" | "end";
   triggerClassName?: string;
+  /** Fork: shows only the provider icon; the name stays for screen readers and in the popup. */
+  iconOnly?: boolean;
   triggerLabel?: string;
   triggerAriaLabel?: string;
   onOpenChange?: (open: boolean) => void;
@@ -276,6 +278,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       "min-w-0 flex-1 overflow-hidden truncate",
       // Long names such as "Fusion (Claude Opus 5.5 Medium + SWE-2 High)" would push the composer.
       props.isComposerOwned && "max-w-56",
+      props.iconOnly && "sr-only",
     ),
     "data-chat-provider-model-picker-label": "true",
   } as const;
@@ -430,7 +433,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
             </Tooltip>
           )}
-          {props.triggerSuffix}
+          {props.iconOnly ? null : props.triggerSuffix}
           {selectedModel?.isUnavailable && !selectedEntries && props.triggerLabel === undefined ? (
             <Badge variant="outline" size="sm">
               Unavailable

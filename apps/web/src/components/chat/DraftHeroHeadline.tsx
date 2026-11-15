@@ -400,7 +400,8 @@ export function DraftHeroHeadline({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
+    // Fork: the Tritium backdrop keeps its characters faint behind this text.
+    <div data-backdrop-clear className="mx-auto flex w-full max-w-5xl flex-col items-center">
       {hasResolvedProject && !isScratchDraft ? (
         <DraftHeroProjectHeading projectName={activeProjectTitle ?? "Choose a project"}>
           {projectSelector}

@@ -2640,3 +2640,10 @@ code {
 .messages-timeline-scroll:focus-visible {
   outline: none;
 }
+
+/* Fork: the Tritium backdrop canvas reads its ink from `color` and its accent from the border
+   color, so both follow the theme. */
+.tritium-backdrop {
+  color: var(--muted-foreground);
+  border: 0 solid light-dark(#1f5fa8, #7cc6ff);
+}

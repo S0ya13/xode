@@ -1398,7 +1398,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
       return (
         <>
           {activityAnnouncer}
-          <div className="h-full min-h-0 bg-background" data-timeline-loading="true" />
+          {/* Fork: transparent, so the Tritium backdrop shows behind an empty thread. */}
+          <div className="h-full min-h-0" data-timeline-loading="true" />
         </>
       );
     }

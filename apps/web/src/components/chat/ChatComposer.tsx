@@ -216,6 +216,9 @@ import {
 } from "./ComposerAttachmentStrip";
 import { CollapsedComposerStopAction, ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
+import { ComposerContextMeter } from "./ComposerContextMeter";
+import type { ThreadDetailsCompact } from "./ThreadDetailsActivity";
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { buildPullRequestReferenceContext } from "../pullRequest/pullRequestDetail.logic";
@@ -386,6 +389,10 @@ export interface ChatComposerProps {
   bannerItems: readonly ComposerBannerStackItem[];
   resumeCompactionTokens: number | null;
   keepFullHistory: boolean;
+  /** Fork: the thread's context use, shown as a ring in the footer. */
+  contextWindow?: ContextWindowSnapshot | null;
+  /** Fork: the Compact action the context ring offers. */
+  compact?: ThreadDetailsCompact;
   onToggleKeepFullHistory: () => void;
   onUsageLimitsCommand?: (() => void) | undefined;
   sideChatAvailable?: boolean;
@@ -3794,6 +3801,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   >
                     {composerControls}
                   </div>
+                  {dictationTakesFooter || props.contextWindow === undefined ? null : (
+                    <ComposerContextMeter usage={props.contextWindow} compact={props.compact} />
+                  )}
                   <ComposerFooterPrimaryActions
                     // Stop state belongs to one thread; the composer stays mounted across threads.
                     key={`${environmentId}:${activeThreadId ?? "new"}`}

@@ -226,6 +226,7 @@ import {
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
+import { TritiumBackdrop } from "./chat/TritiumBackdrop";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
 import { isPreviewFocused } from "../lib/previewFocus";
@@ -3396,7 +3397,9 @@ export default function ChatView(props: ChatViewProps) {
           </header>
         )}
 
-        <div className="relative flex min-h-0 min-w-0 flex-1">
+        {/* Fork: isolate keeps the backdrop above the page background and under the chat. */}
+        <div className="relative isolate flex min-h-0 min-w-0 flex-1">
+          {embedded ? null : <TritiumBackdrop dim={!isDraftHeroState} />}
           <ThreadFindCanvas
             findOptions={{
               skills: timelineSkills,
@@ -3434,10 +3437,8 @@ export default function ChatView(props: ChatViewProps) {
               setThreadError={setThreadError}
               setThreadErrorBannerDismissTick={setThreadErrorBannerDismissTick}
             />
-            <div
-              {...conversationArea}
-              className="relative flex min-h-0 flex-1 flex-col bg-background"
-            >
+            {/* Fork: transparent, so the Tritium backdrop shows; the page background sits below it. */}
+            <div {...conversationArea} className="relative flex min-h-0 flex-1 flex-col">
               <WorkspaceMutationIdContext value={workspaceMutationId}>
                 <ThreadTimeline
                   pendingApprovals={pendingApprovals}
@@ -3696,6 +3697,11 @@ export default function ChatView(props: ChatViewProps) {
                                     : composerBannerItems
                                 }
                                 resumeCompactionTokens={resumeCompactionTokens}
+                                contextWindow={activeContextWindow}
+                                compact={{
+                                  onCompact: onComposerCompactContextStable,
+                                  disabled: compactDisabled,
+                                }}
                                 keepFullHistory={keepFullHistory}
                                 onToggleKeepFullHistory={toggleKeepFullHistoryStable}
                                 sideChatAvailable={sideChat.available}

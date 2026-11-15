@@ -186,6 +186,7 @@ export function ComposerControlsBar(props: {
       environmentId={environmentId}
       workspaceCwd={props.workspaceCwd}
       compact={false}
+      iconOnly
       isComposerOwned
       // The trigger grows away from this edge when its model or effort label changes.
       popupAlign={composerControlsCollapsed ? "start" : "end"}

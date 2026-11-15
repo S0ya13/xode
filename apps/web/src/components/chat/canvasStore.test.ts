@@ -11,7 +11,6 @@ const threadRef = {
   environmentId: EnvironmentId.make("environment-1"),
   threadId: ThreadId.make("thread-1"),
 };
-const otherThreadRef = { ...threadRef, threadId: ThreadId.make("thread-2") };
 const measurements = (width: number, height = 900): ChatCanvasMeasurements => ({
   width,
   height,
@@ -30,44 +29,21 @@ const preview: ChatCanvasPreview = {
 };
 
 describe("chat canvas model", () => {
-  it("shows the details card inline only where the canvas fits it beside the chat", () => {
-    const resolve = (width: number, narrowestWidth = width) =>
+  // Fork: the details card opens from the header as a popover and never sits beside the chat.
+  it("always shows the details card as a popover and keeps the canvas free of it", () => {
+    const resolve = (width: number) =>
       resolveChatCanvasModel({
-        measurements: { ...measurements(width), narrowestWidth },
-        detailsCardMeasurement: null,
-        threadRef,
-        preview: null,
-        detailsCardInlineOpen: true,
-      }).detailsCardMode;
-    expect(resolve(1400)).toBe("inline");
-    expect(resolve(900)).toBe("popover");
-    expect(resolve(1400, 900)).toBe("popover");
-  });
-
-  it("moves the card into a popover when a preview below it leaves too little height", () => {
-    const resolve = (fullContentHeight: number) =>
-      resolveChatCanvasModel({
-        measurements: measurements(1100, 300),
-        detailsCardMeasurement: { threadRef, width: 280, fullContentHeight },
+        measurements: measurements(width, 300),
+        detailsCardMeasurement: { threadRef, width: 280, fullContentHeight: 400 },
         threadRef,
         preview: { ...preview, position: { x: 760, y: 150 }, lastInteraction: "drag" },
         detailsCardInlineOpen: true,
       });
-    const model = resolve(400);
-    expect(model.layout.overlapsDetailsCard).toBe(true);
-    expect(model.detailsCardMode).toBe("popover");
-  });
-
-  it("ignores a details card measured for another thread", () => {
-    const model = resolveChatCanvasModel({
-      measurements: measurements(1100, 300),
-      detailsCardMeasurement: { threadRef: otherThreadRef, width: 280, fullContentHeight: 400 },
-      threadRef,
-      preview: { ...preview, position: { x: 760, y: 150 }, lastInteraction: "drag" },
-      detailsCardInlineOpen: true,
-    });
-    expect(model.layout.overlapsDetailsCard).toBe(false);
-    expect(model.detailsCardMode).toBe("inline");
+    for (const width of [900, 1100, 1400]) {
+      expect(resolve(width).detailsCardMode).toBe("popover");
+      expect(resolve(width).detailsCardPlacement).toBeNull();
+      expect(resolve(width).layout.overlapsDetailsCard).toBe(false);
+    }
   });
 
   it("keeps state identity when a measurement repeats", () => {

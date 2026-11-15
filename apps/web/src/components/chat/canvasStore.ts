@@ -86,7 +86,7 @@ export function resolveChatCanvasModel({
   detailsCardMeasurement,
   threadRef,
   preview,
-  detailsCardInlineOpen,
+  detailsCardInlineOpen: _detailsCardInlineOpen,
 }: {
   measurements: ChatCanvasMeasurements;
   detailsCardMeasurement: DetailsCardMeasurement | null;
@@ -95,6 +95,8 @@ export function resolveChatCanvasModel({
   preview: ChatCanvasPreview | null;
   detailsCardInlineOpen: boolean;
 }) {
+  // Fork: the details card opens from the header as a popover and never sits beside the chat.
+  const detailsCardInlineOpen: boolean = false;
   const container = { width: measurements.width, height: measurements.height };
   const { findBar } = measurements;
   const detailsCardTopInset = findBar?.bottom ?? 0;
@@ -140,14 +142,16 @@ export function resolveChatCanvasModel({
     detailsCard,
     findBar,
   });
-  const detailsCardPlacement = resolveThreadDetailsCardLayout({
-    container,
-    narrowestWidth: measurements.narrowestWidth ?? measurements.width,
-    lane,
-    frame: layout.frame,
-    overlapsDetailsCard: layout.overlapsDetailsCard,
-    topInset: detailsCardTopInset,
-  });
+  const detailsCardPlacement = !detailsCardInlineOpen
+    ? null
+    : resolveThreadDetailsCardLayout({
+        container,
+        narrowestWidth: measurements.narrowestWidth ?? measurements.width,
+        lane,
+        frame: layout.frame,
+        overlapsDetailsCard: layout.overlapsDetailsCard,
+        topInset: detailsCardTopInset,
+      });
   const detailsCardMode: ThreadPanelPresentation = detailsCardPlacement ? "inline" : "popover";
   return {
     container,
