@@ -77,6 +77,12 @@ function coldClaudeThread() {
   return { ...thread, providerThreads: [providerThread] };
 }
 
+// Fork: the composer's model picker opens from the context ring's Model row.
+async function openModelPicker() {
+  await page.getByRole("button", { name: /^Context/ }).click();
+  await page.getByRole("button", { name: /^Model/ }).click();
+}
+
 it("sends a Codex follow-up on a cold Claude thread without compacting first", async () => {
   const thread = coldClaudeThread();
   using _environment = installFakeEnvironment([thread], {
@@ -99,11 +105,15 @@ it("sends a Codex follow-up on a cold Claude thread without compacting first", a
   const compactAndSend = page.getByRole("button", { name: "Compact and send" });
   await expect.element(compactAndSend).toBeVisible();
 
-  await page.getByRole("button", { name: "Claude Opus 4.6", exact: true }).click();
+  await openModelPicker();
   // The picker lists only the active provider's models until you search.
   await userEvent.type(page.getByPlaceholder("Search models..."), "GPT-5.4");
   await page.getByRole("option", { name: "GPT-5.4", exact: false }).click();
-  await expect.element(page.getByRole("button", { name: "GPT-5.4", exact: true })).toBeVisible();
+  await vi.waitFor(() =>
+    expect(
+      document.querySelector("[data-chat-provider-model-picker]")?.getAttribute("aria-label"),
+    ).toMatch(/^GPT-5\.4/),
+  );
   await expect.element(compactAndSend).not.toBeInTheDocument();
   // Picking a model leaves the composer's settings menu open.
   await userEvent.keyboard("{Escape}");

@@ -109,8 +109,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   open?: boolean;
   popupAlign?: "start" | "end";
   triggerClassName?: string;
-  /** Fork: shows only the provider icon; the name stays for screen readers and in the popup. */
-  iconOnly?: boolean;
+  /**
+   * Fork: the trigger takes no room and no tab stop; it only anchors the popup, which opens from
+   * another control or the shortcut.
+   */
+  triggerHidden?: boolean;
   triggerLabel?: string;
   triggerAriaLabel?: string;
   onOpenChange?: (open: boolean) => void;
@@ -278,7 +281,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       "min-w-0 flex-1 overflow-hidden truncate",
       // Long names such as "Fusion (Claude Opus 5.5 Medium + SWE-2 High)" would push the composer.
       props.isComposerOwned && "max-w-56",
-      props.iconOnly && "sr-only",
     ),
     "data-chat-provider-model-picker-label": "true",
   } as const;
@@ -369,7 +371,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 ? "max-w-42 shrink-0"
                 : !props.isComposerOwned && "max-w-48 sm:max-w-56",
               props.triggerClassName,
+              props.triggerHidden &&
+                "pointer-events-none absolute end-0 bottom-0 size-0 min-w-0 overflow-hidden border-0 p-0 opacity-0",
             )}
+            {...(props.triggerHidden ? { tabIndex: -1, "aria-hidden": true } : {})}
             disabled={props.disabled}
           />
         }
@@ -433,7 +438,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
             </Tooltip>
           )}
-          {props.iconOnly ? null : props.triggerSuffix}
+          {props.triggerSuffix}
           {selectedModel?.isUnavailable && !selectedEntries && props.triggerLabel === undefined ? (
             <Badge variant="outline" size="sm">
               Unavailable

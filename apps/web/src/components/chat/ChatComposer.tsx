@@ -216,7 +216,6 @@ import {
 } from "./ComposerAttachmentStrip";
 import { CollapsedComposerStopAction, ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
-import { ComposerContextMeter } from "./ComposerContextMeter";
 import type { ThreadDetailsCompact } from "./ThreadDetailsActivity";
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
@@ -2554,6 +2553,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       onModelPickerOpenChange={setIsComposerModelPickerOpen}
       modelPickerIconClassName={composerProviderState.modelPickerIconClassName}
       getModelDisabledReason={getModelDisabledReason}
+      contextWindow={props.contextWindow}
+      compact={props.compact}
     />
   );
   // An open question owns the space above the composer. Only a machine problem,
@@ -3801,9 +3802,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   >
                     {composerControls}
                   </div>
-                  {dictationTakesFooter || props.contextWindow === undefined ? null : (
-                    <ComposerContextMeter usage={props.contextWindow} compact={props.compact} />
-                  )}
                   <ComposerFooterPrimaryActions
                     // Stop state belongs to one thread; the composer stays mounted across threads.
                     key={`${environmentId}:${activeThreadId ?? "new"}`}

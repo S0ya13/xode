@@ -36,6 +36,13 @@ vi.mock(import("~/rpc/requestLatencyState"), async (original) => ({
 }));
 
 // Its own file: the app's shell subscription outlives a test, and it must list this thread.
+
+// Fork: the composer's model picker opens from the context ring's Model row.
+async function openModelPicker() {
+  await page.getByRole("button", { name: /^Context/ }).click();
+  await page.getByRole("button", { name: /^Model/ }).click();
+}
+
 it("a model picked for an existing thread reaches the server before any message is sent", async () => {
   const stored = {
     instanceId: ProviderInstanceId.make("codex"),
@@ -65,7 +72,7 @@ it("a model picked for an existing thread reaches the server before any message 
   const modelSets = () =>
     dispatchedCommands().filter((command) => command.type === "thread.model-selection.set");
 
-  await page.getByRole("button", { name: "GPT-5.4", exact: true }).click();
+  await openModelPicker();
   await page.getByRole("option", { name: /GPT-5\.5/ }).click();
   await vi.waitFor(() =>
     expect(modelSets()).toEqual([
@@ -80,7 +87,7 @@ it("a model picked for an existing thread reaches the server before any message 
   await userEvent.keyboard("{Escape}");
   await router.navigate({ href: `/${ENVIRONMENT_ID}/${aliasThread.id}` });
   await expect.element(page.getByText("Answer 0 for thread-model-alias.")).toBeVisible();
-  await page.getByRole("button", { name: "GPT-5.4", exact: true }).click();
+  await openModelPicker();
   await page.getByRole("option", { name: /GPT-5\.4/ }).click();
   await vi.waitFor(() =>
     expect(modelSets().at(-1)).toEqual(

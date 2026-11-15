@@ -10,6 +10,9 @@ import {
   ComposerModelPicker,
   type RuntimeModeOption,
 } from "./ComposerFooterControls";
+import { ComposerContextMeter } from "./ComposerContextMeter";
+import { resolveModelPickerSelectedModel } from "./ModelPickerContent";
+import { getTriggerDisplayModelName } from "./providerIconUtils";
 import {
   type EnvironmentId,
   type ModelSelection,
@@ -86,6 +89,9 @@ export function ComposerControlsBar(props: {
   onModelPickerOpenChange: (open: boolean) => void;
   modelPickerIconClassName: string | undefined;
   getModelDisabledReason: ChatComposerProps["getModelDisabledReason"];
+  /** Fork: the thread's context use; when set, a context ring replaces the model trigger. */
+  contextWindow: ChatComposerProps["contextWindow"];
+  compact: ChatComposerProps["compact"];
 }) {
   const {
     environmentId,
@@ -186,7 +192,7 @@ export function ComposerControlsBar(props: {
       environmentId={environmentId}
       workspaceCwd={props.workspaceCwd}
       compact={false}
-      iconOnly
+      triggerHidden={props.contextWindow !== undefined}
       isComposerOwned
       // The trigger grows away from this edge when its model or effort label changes.
       popupAlign={composerControlsCollapsed ? "start" : "end"}
@@ -215,8 +221,7 @@ export function ComposerControlsBar(props: {
       triggerClassName={cn(
         "group/model-trigger",
         MODEL_TRIGGER_STATES,
-        // Fork: the trigger shows only the provider icon, so it needs no room for a name.
-        composerControlsCollapsed && "shrink text-xs!",
+        composerControlsCollapsed ? "min-w-13 shrink text-xs!" : "min-w-13",
       )}
       triggerSuffix={effort.suffix}
       triggerDetail={effort.detail}
@@ -247,6 +252,34 @@ export function ComposerControlsBar(props: {
       onOpenProviderSetup={onOpenProviderSetup}
     />
   );
+  const activeEntry = providerInstanceEntries.find(
+    (entry) => entry.instanceId === selectedInstanceId,
+  );
+  const pickedModel = resolveModelPickerSelectedModel({
+    driverKind: activeEntry?.driverKind,
+    model: selectedModelForPickerWithCustomFallback,
+    options: modelOptionsByInstance.get(selectedInstanceId) ?? [],
+  });
+  const contextMeter =
+    props.contextWindow === undefined ? null : (
+      <ComposerContextMeter
+        usage={props.contextWindow}
+        compact={props.compact}
+        modelLabel={[
+          pickedModel
+            ? getTriggerDisplayModelName(pickedModel, activeEntry?.driverKind)
+            : selectedModelForPickerWithCustomFallback,
+          effort.detail,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        accessLabel={
+          compatibleRuntimeModeOptions.find((option) => option.mode === compatibleRuntimeMode)
+            ?.label ?? compatibleRuntimeMode
+        }
+        onOpenModelPicker={() => onModelPickerOpenChange(true)}
+      />
+    );
   return showProviderUnavailable ? (
     <ComposerControl
       type="button"
@@ -309,6 +342,7 @@ export function ComposerControlsBar(props: {
           />
         </div>
       </>
+      {contextMeter}
     </>
   );
 }
