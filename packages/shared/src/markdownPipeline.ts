@@ -215,7 +215,7 @@ const CHAT_MARKDOWN_SANITIZE_SCHEMA = {
       "dataCodeMeta",
       "dataInlineCode",
     ],
-    blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataAlert"],
+    blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataAlert", "dataAlertTitle"],
     div: [...(defaultSchema.attributes?.div ?? []), ...CODEX_ARTIFACT_TEMPLATE_HAST_PROPERTIES],
     a: [...(defaultSchema.attributes?.a ?? []), "dataPullRequestAutolink"],
     img: [

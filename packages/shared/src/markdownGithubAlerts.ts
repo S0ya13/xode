@@ -7,7 +7,9 @@ interface MarkdownAstNode {
   children?: MarkdownAstNode[];
 }
 
-const GITHUB_ALERT_MARKER = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\r?\n|$)/i;
+// Fork: SUCCESS, NEXT and REPLIES extend GitHub's set, and text after the marker becomes the title.
+const GITHUB_ALERT_MARKER =
+  /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|SUCCESS|NEXT|REPLIES)\](?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
 
 function readGithubAlert(node: MarkdownAstNode): void {
   if (node.type !== "blockquote") return;
@@ -19,9 +21,17 @@ function readGithubAlert(node: MarkdownAstNode): void {
   const match = GITHUB_ALERT_MARKER.exec(text.value);
   if (!match?.[1]) return;
 
-  const remainder = text.value.slice(match[0].length);
   // An empty remainder may have next-line sibling content; preserve whether the marker ended its line.
   const markerEndsItsLine = match[0].endsWith("\n");
+  const titleText = match[2];
+  // A title only counts when the whole line is plain text; formatted text stays in the body.
+  const hasTitle =
+    titleText !== undefined && (markerEndsItsLine || paragraph.children?.length === 1);
+  const title = hasTitle ? titleText.trim() : "";
+  const remainder =
+    titleText !== undefined && !hasTitle
+      ? text.value.slice(match[0].length - titleText.length)
+      : text.value.slice(match[0].length);
   if (remainder.length > 0) {
     text.value = remainder;
   } else if (markerEndsItsLine || paragraph.children?.length === 1) {
@@ -38,6 +48,7 @@ function readGithubAlert(node: MarkdownAstNode): void {
     hProperties: {
       ...node.data?.hProperties,
       dataAlert: match[1].toLowerCase(),
+      ...(title ? { dataAlertTitle: title } : {}),
     },
   };
 }

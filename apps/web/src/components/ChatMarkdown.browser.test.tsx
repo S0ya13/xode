@@ -702,6 +702,21 @@ describe("ChatMarkdown copy", () => {
     expect(select(labelText, bodyText, "Back up".length)).toBe("Warning\n\nBack up");
   });
 
+  it("keeps a callout's title when it copies as alert Markdown", async () => {
+    setup();
+    await using screen = await renderText("> [!WARNING] Two old warnings\n> Back up first.");
+    const [label, body] = screen.container.querySelectorAll('[role="note"] > p');
+    const range = document.createRange();
+    range.setStart(label!.firstChild!, 0);
+    range.setEnd(body!.firstChild!, body!.firstChild!.textContent!.length);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(chatMarkdownClipboardPayload(selection)?.text).toBe(
+      "> [!WARNING] Two old warnings\n> Back up first.",
+    );
+  });
+
   it("copies part of inline code without prose escapes", async () => {
     setup();
     await using screen = await renderText("Read `items[0]*_x` and a*b*c.");

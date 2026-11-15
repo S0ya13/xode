@@ -9,6 +9,7 @@ import { GitForkIcon, ReplyIcon } from "lucide-react";
 import { captureAssistantMessageOpening } from "~/lib/assistantTextSelection";
 import { responseContextRecord } from "~/lib/composerContextRecords";
 import { Button } from "../ui/button";
+import { toastManager } from "../ui/toast";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
@@ -43,6 +44,21 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   const text = liveText ?? row.message.text;
   const messageText =
     text || (row.message.streaming || row.suppressEmptyResponse ? "" : "(empty response)");
+  const activity = use(TimelineRowActivityCtx);
+  const sendAppMessage = ctx.onSendAppMessage;
+  // Fork: reply options belong to the latest finished run; older ones would answer a stale question.
+  const onSendReply =
+    sendAppMessage && !activity.isWorking && row.message.runId === activity.latestRunId
+      ? (reply: string) => {
+          sendAppMessage(reply).catch((error: unknown) => {
+            toastManager.add({
+              type: "error",
+              title: "Could not send the reply",
+              ...(error instanceof Error ? { description: error.message } : {}),
+            });
+          });
+        }
+      : undefined;
 
   return (
     <>
@@ -72,6 +88,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
               headingLevelOffset={MESSAGE_HEADING_LEVEL}
               onUseArtifactTemplate={ctx.onUseArtifactTemplate}
               onRunShellCommand={ctx.onRunShellCommand}
+              onSendReply={onSendReply}
               onImageExpand={ctx.onImageExpand}
             />
           </AssistantCitationSource>

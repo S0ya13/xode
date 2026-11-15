@@ -28,6 +28,8 @@ import {
   encodeComposerContextClipboardHtml,
 } from "@t3tools/shared/composerContextClipboard";
 import {
+  ArrowRightIcon,
+  CheckIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
   GlobeIcon,
@@ -251,6 +253,8 @@ interface ChatMarkdownProps {
   parseRawHtml?: boolean;
   onUseArtifactTemplate?: ((template: CodexArtifactTemplate) => void) | undefined;
   onRunShellCommand?: ((command: string) => void) | undefined;
+  /** Sends a `[!REPLIES]` option as the user's next message; unset hides the options. */
+  onSendReply?: ((text: string) => void) | undefined;
   imageBaseDir?: string | undefined;
   workspaceMutationId?: string | null | undefined;
   onImageExpand?: ((preview: ExpandedImagePreview) => void) | undefined;
@@ -354,47 +358,64 @@ function orderedListGutterStyle(
   return { "--list-gutter": `${markerWidth + 2}ch` };
 }
 
+// Fork: alerts read as cards; SUCCESS and NEXT sit in the prose without a box.
 const GITHUB_ALERT_PRESENTATIONS: Record<
   string,
-  { label: string; Icon: typeof InfoIcon; borderClassName: string; titleClassName: string }
+  {
+    label: string;
+    Icon: typeof InfoIcon;
+    layout: "card" | "status" | "next";
+    toneClassName: string;
+  }
 > = {
-  insight: {
-    label: "Insight",
-    Icon: StarIcon,
-    borderClassName: "border-info",
-    titleClassName: "text-info",
-  },
-  note: {
-    label: "Note",
-    Icon: InfoIcon,
-    borderClassName: "border-blue-500/70",
-    titleClassName: "text-blue-600 dark:text-blue-400",
-  },
-  tip: {
-    label: "Tip",
-    Icon: LightbulbIcon,
-    borderClassName: "border-emerald-500/70",
-    titleClassName: "text-emerald-600 dark:text-emerald-400",
-  },
+  insight: { label: "Insight", Icon: StarIcon, layout: "card", toneClassName: "info" },
+  note: { label: "Note", Icon: InfoIcon, layout: "card", toneClassName: "info" },
+  tip: { label: "Tip", Icon: LightbulbIcon, layout: "card", toneClassName: "success" },
   important: {
     label: "Important",
     Icon: MessageSquareWarningIcon,
-    borderClassName: "border-purple-500/70",
-    titleClassName: "text-purple-600 dark:text-purple-400",
+    layout: "card",
+    toneClassName: "primary",
   },
-  warning: {
-    label: "Warning",
-    Icon: TriangleAlertIcon,
-    borderClassName: "border-amber-500/70",
-    titleClassName: "text-amber-600 dark:text-amber-500",
-  },
+  warning: { label: "Warning", Icon: TriangleAlertIcon, layout: "card", toneClassName: "warning" },
   caution: {
     label: "Caution",
     Icon: OctagonAlertIcon,
-    borderClassName: "border-red-500/70",
-    titleClassName: "text-red-600 dark:text-red-400",
+    layout: "card",
+    toneClassName: "destructive",
+  },
+  success: { label: "Done", Icon: CheckIcon, layout: "status", toneClassName: "success" },
+  next: { label: "Next", Icon: ArrowRightIcon, layout: "next", toneClassName: "primary" },
+};
+
+// Full class names, so Tailwind sees each one.
+const ALERT_TONE_CLASSES: Record<string, { icon: string; card: string; badge: string }> = {
+  info: { icon: "text-info", card: "border-info/25 bg-info/8", badge: "bg-info/14" },
+  success: { icon: "text-success", card: "border-success/25 bg-success/8", badge: "bg-success/14" },
+  primary: { icon: "text-primary", card: "border-primary/25 bg-primary/6", badge: "bg-primary/12" },
+  warning: { icon: "text-warning", card: "border-warning/25 bg-warning/9", badge: "bg-warning/14" },
+  destructive: {
+    icon: "text-destructive",
+    card: "border-destructive/25 bg-destructive/7",
+    badge: "bg-destructive/12",
   },
 };
+
+/** Each list item of a `[!REPLIES]` quote, as plain text. */
+function markdownReplyOptions(node: unknown): string[] {
+  const options: string[] = [];
+  const visit = (child: unknown) => {
+    if (!child || typeof child !== "object") return;
+    if ("tagName" in child && child.tagName === "li") {
+      const option = hastPlainTextDeep(child).trim();
+      if (option) options.push(option);
+      return;
+    }
+    if ("children" in child && Array.isArray(child.children)) child.children.forEach(visit);
+  };
+  visit(node);
+  return options;
+}
 
 function normalizeMarkdownLinkHrefKey(href: string): string {
   const normalizedHref = normalizeMarkdownLinkDestination(href);
@@ -519,6 +540,7 @@ function useChatMarkdownState({
   skills = EMPTY_MARKDOWN_SKILLS,
   onUseArtifactTemplate,
   onRunShellCommand,
+  onSendReply,
   imageBaseDir,
   workspaceMutationId,
   onImageExpand,
@@ -970,6 +992,8 @@ function useChatMarkdownState({
   };
 
   const componentState = {
+    // Fork: streaming replies are not final, so their options wait.
+    onSendReply: isStreaming ? undefined : onSendReply,
     canOperateHost,
     canOperatePreview,
     cwd,
@@ -1071,27 +1095,78 @@ const CHAT_MARKDOWN_COMPONENTS = {
       </p>
     );
   },
-  blockquote: function MarkdownBlockquote({ node: _node, children, ...props }) {
-    const alertKind = String((props as Record<string, unknown>)["data-alert"] ?? "");
+  blockquote: function MarkdownBlockquote({ node, children, ...props }) {
+    const { onSendReply } = use(ChatMarkdownRendererContext);
+    const record = props as Record<string, unknown>;
+    const alertKind = String(record["data-alert"] ?? "");
+    if (alertKind === "replies") {
+      // Only the latest finished reply offers answers; elsewhere they would be stale.
+      const options = onSendReply ? markdownReplyOptions(node) : [];
+      if (!onSendReply || options.length === 0) return null;
+      return (
+        <div
+          data-markdown-replies=""
+          data-thread-find-ignore="true"
+          className="my-3 flex flex-wrap gap-1.5"
+        >
+          {options.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="max-w-full"
+              onClick={() => onSendReply(option)}
+            >
+              {option}
+            </Button>
+          ))}
+        </div>
+      );
+    }
     const alert = GITHUB_ALERT_PRESENTATIONS[alertKind];
     if (!alert) {
       return <blockquote {...props}>{children}</blockquote>;
     }
+    const tone = ALERT_TONE_CLASSES[alert.toneClassName] ?? ALERT_TONE_CLASSES.info!;
+    const title = typeof record["data-alert-title"] === "string" ? record["data-alert-title"] : "";
+    // NEXT without a title reads as one line: the arrow, then the body.
+    const label = title || (alert.layout === "next" ? "" : alert.label);
+    // Content stays a direct child of the note: copying walks its children.
     return (
       <div
         role="note"
         data-markdown-alert={alertKind}
+        data-markdown-alert-title={title || undefined}
         dir={props.dir}
-        className={cn("my-1 border-s-2 ps-3", alert.borderClassName)}
+        className={cn(
+          "relative my-3 [&>:last-child]:mb-0! [&>:nth-child(2)]:mt-0! [&>:not([aria-hidden])]:my-1!",
+          alert.layout === "card" && ["rounded-lg border py-2.5 ps-10 pe-3.5", tone.card],
+          alert.layout === "status" && "ps-7",
+          alert.layout === "next" && "border-t border-border ps-7 pt-3",
+        )}
       >
-        <p
-          data-thread-find-ignore="true"
-          data-markdown-alert-label=""
-          className={cn("flex items-center gap-1.5 font-medium", alert.titleClassName)}
+        <span
+          aria-hidden
+          className={cn(
+            "absolute grid size-4.5 place-items-center",
+            tone.icon,
+            alert.layout === "card" && "start-3.5 top-[calc(0.625rem+0.15rem)]",
+            alert.layout === "status" && ["start-0 top-[0.15rem] rounded-full", tone.badge],
+            alert.layout === "next" && "start-0 top-[calc(0.75rem+0.15rem)]",
+          )}
         >
-          <alert.Icon aria-hidden className="size-3.5 shrink-0" />
-          {alert.label}
-        </p>
+          <alert.Icon className={alert.layout === "status" ? "size-3" : "size-3.5"} />
+        </span>
+        {label ? (
+          <p
+            data-thread-find-ignore={title ? undefined : "true"}
+            data-markdown-alert-label=""
+            className="font-semibold"
+          >
+            {label}
+          </p>
+        ) : null}
         {children}
       </div>
     );

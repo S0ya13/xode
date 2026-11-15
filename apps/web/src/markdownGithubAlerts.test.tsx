@@ -30,10 +30,26 @@ describe("remarkGithubAlerts", () => {
     expect(html).toContain("Changes live transcript routing.");
   });
 
-  it("leaves a quote alone when the marker shares its line with anything else", () => {
-    const html = renderMarkdown("> [!NOTE] an ordinary quote");
+  it("reads plain text after the marker as the title", () => {
+    const html = renderMarkdown("> [!WARNING] Two old warnings\n> Docker reports unhealthy.");
 
-    expect(html).not.toContain("data-alert");
-    expect(html).toContain("[!NOTE] an ordinary quote");
+    expect(html).toContain('data-alert="warning"');
+    expect(html).toContain('data-alert-title="Two old warnings"');
+    expect(html).not.toContain("[!WARNING]");
+    expect(html).toContain("Docker reports unhealthy.");
+  });
+
+  it("keeps a formatted title line as body text", () => {
+    const html = renderMarkdown("> [!NOTE] an **ordinary** quote");
+
+    expect(html).toContain('data-alert="note"');
+    expect(html).not.toContain("data-alert-title");
+    expect(html).toContain("an <strong>ordinary</strong> quote");
+  });
+
+  it("tags the fork's success, next and replies kinds", () => {
+    expect(renderMarkdown("> [!SUCCESS] Done")).toContain('data-alert="success"');
+    expect(renderMarkdown("> [!NEXT]\n> Restart the app.")).toContain('data-alert="next"');
+    expect(renderMarkdown("> [!REPLIES]\n> - Yes\n> - No")).toContain('data-alert="replies"');
   });
 });

@@ -295,7 +295,14 @@ function serializeNode(node: Node, inTableCell = false): string {
   if (isSkippedElement(element)) return "";
   const alert = element.getAttribute(ALERT_ATTRIBUTE);
   if (alert === "insight") return serializeInsight(element, inTableCell);
-  if (alert !== null) return serializeBlockquote(element, inTableCell, `[!${alert.toUpperCase()}]`);
+  if (alert !== null) {
+    const title = element.getAttribute("data-markdown-alert-title");
+    return serializeBlockquote(
+      element,
+      inTableCell,
+      `[!${alert.toUpperCase()}]${title ? ` ${title}` : ""}`,
+    );
+  }
 
   const headingLevel = /^H([1-6])$/.exec(element.tagName)?.[1];
   if (headingLevel) {
