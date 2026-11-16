@@ -17,6 +17,7 @@ import type {
   SpeechStreamText,
   SpeechTranscriptionOptions,
 } from "@t3tools/contracts";
+import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
 import { resolveSpeechVocabulary } from "@t3tools/shared/speech";
 import { useEffect, useSyncExternalStore } from "react";
 
@@ -135,7 +136,9 @@ export class VoiceInputSession {
       cloudProvider: key.cloudProvider,
       cloudModel: key.cloudModel,
       hasAudioConsent,
-      getStreamingEnabled: () => this.target?.readContext()?.clientSettings.speechStreaming ?? true,
+      getStreamingEnabled: () =>
+        this.target?.readContext().clientSettings.speechStreaming ??
+        DEFAULT_CLIENT_SETTINGS.speechStreaming,
       getTranscriptionOptions: (): SpeechTranscriptionOptions => {
         const context = this.target?.readContext();
         if (!context) throw new Error("Voice input has no draft to record into.");
@@ -295,6 +298,13 @@ export class VoiceInputSession {
     this.publishActivity(SILENT_ACTIVITY);
     this.publish({ ...this.snapshot, target });
     return this.controller.start();
+  }
+
+  /** A newly mounted editor for the recording's draft replaces the target that started it. */
+  adopt(target: VoiceInputTarget): void {
+    if (this.disposed || this.target?.ownerKey !== target.ownerKey) return;
+    this.target = target;
+    this.publish({ ...this.snapshot, target });
   }
 
   stop(): Promise<void> {

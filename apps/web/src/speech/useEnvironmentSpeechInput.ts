@@ -19,7 +19,7 @@ import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { chooseSetupSpeechModel } from "@t3tools/shared/speech";
 import { useNavigate } from "@tanstack/react-router";
 import * as Option from "effect/Option";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
 import { toastManager } from "../components/ui/toast";
@@ -204,8 +204,8 @@ export function useEnvironmentSpeechInput(input: HookInput) {
     text?: string;
   } | null>(null);
   const latestRef = useRef({ input, clientSettings, cleanupPrepared, projectWords, session });
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes committed props and settings to the asynchronous recording session
-  useEffect(() => {
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- publishes committed props before an async completion can read them through the session
+  useLayoutEffect(() => {
     latestRef.current = { input, clientSettings, cleanupPrepared, projectWords, session };
   });
   const mountedRef = useRef(false);
@@ -283,6 +283,7 @@ export function useEnvironmentSpeechInput(input: HookInput) {
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- delivers a queued submission only after the transcript has committed to the draft
   useEffect(() => {
     const pending = pendingSubmissionRef.current;
+    if (state.phase === "error") pendingSubmissionRef.current = null;
     if (state.phase !== "idle" || !pending) return;
     pendingSubmissionRef.current = null;
     if (!input.disabled && pending.ownerKey === input.ownerKey && pending.text !== undefined)
@@ -315,8 +316,21 @@ export function useEnvironmentSpeechInput(input: HookInput) {
     },
   );
 
-  const createTarget = (): VoiceInputTarget => {
+  const createTarget = useStableCallback((): VoiceInputTarget => {
     const owner = latestRef.current.input.ownerKey;
+    const readContext = () => {
+      const current = latestRef.current;
+      return {
+        environmentId: current.input.environmentId,
+        projectName: current.input.projectName ?? null,
+        projectWords: current.projectWords,
+        clientSettings: current.clientSettings,
+        cleanup: current.input.cleanup !== false,
+        cleanupPrepared: current.cleanupPrepared,
+      };
+    };
+    // Once this editor shows another draft, its environment and cleanup must not see this one.
+    const startContext = readContext();
     const persistent = latestRef.current.input.persistentDraft ?? null;
     // While this editor shows the owner, the live editor is the draft; otherwise the stored one.
     const live = () => mountedRef.current && latestRef.current.input.ownerKey === owner;
@@ -341,20 +355,15 @@ export function useEnvironmentSpeechInput(input: HookInput) {
         if (pendingSubmissionRef.current?.ownerKey === owner)
           pendingSubmissionRef.current.text = text;
       },
-      readContext: () => {
-        const current = latestRef.current;
-        return {
-          environmentId: current.input.environmentId,
-          projectName: current.input.projectName ?? null,
-          projectWords: current.projectWords,
-          clientSettings: current.clientSettings,
-          cleanup: current.input.cleanup !== false,
-          cleanupPrepared: current.cleanupPrepared,
-        };
-      },
+      readContext: () => (live() ? readContext() : startContext),
     };
-  };
+  });
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a remounted editor takes over its draft's running recording so a queued Send still sees the transcript
+  useEffect(() => {
+    if (session?.ownerKey === input.ownerKey && voiceInputBlocksSubmission(session.state))
+      session.adopt(createTarget());
+  }, [session, input.ownerKey, createTarget]);
   const loadSetupCatalog = useStableCallback(
     async (connection: PreparedConnection, selectedModelId: string, request: number) => {
       setSetup({ ...INITIAL_SETUP, open: true });

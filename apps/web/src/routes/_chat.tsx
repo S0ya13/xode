@@ -25,7 +25,7 @@ function ChatRouteLayout() {
         <Outlet />
       )}
       {modalOpen ? <Outlet /> : null}
-      <GlobalVoiceInputIndicator />
+      <GlobalVoiceInputIndicator hidden={modalOpen} />
     </>
   );
 }
