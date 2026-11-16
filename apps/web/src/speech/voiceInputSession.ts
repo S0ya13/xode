@@ -134,6 +134,7 @@ export class VoiceInputSession {
       cloudProvider: key.cloudProvider,
       cloudModel: key.cloudModel,
       hasAudioConsent,
+      getStreamingEnabled: () => this.target?.readContext()?.clientSettings.speechStreaming ?? true,
       getTranscriptionOptions: (): SpeechTranscriptionOptions => {
         const context = this.target?.readContext();
         if (!context) throw new Error("Voice input has no draft to record into.");
