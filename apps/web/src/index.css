@@ -2641,12 +2641,52 @@ code {
   outline: none;
 }
 
-/* Fork: the Tritium backdrop canvas reads its ink from `color`, its accent from the border color
-   and its waiting-on-you color from the outline color, so all follow the theme. */
+/* Fork: the Tritium backdrop canvas reads its ink from `color`, its accent from the border color,
+   the accent it drifts to while working from the text decoration color, its waiting-on-you color
+   from the outline color and the chat column width from `text-indent`. */
 .tritium-backdrop {
+  --tritium-accent: light-dark(#1f5fa8, #7cc6ff);
+  --tritium-shift: light-dark(#7a3fd1, #c9a2ff);
   color: var(--muted-foreground);
-  border: 0 solid light-dark(#1f5fa8, #7cc6ff);
+  border: 0 solid var(--tritium-accent);
+  text-decoration-color: var(--tritium-shift);
   outline-color: var(--warning);
+  text-indent: var(--chat-content-max-width);
+}
+
+/* Fork: the edges of the chat glow and breathe while the agent works, warm while it waits. */
+.tritium-backdrop[data-tritium-backdrop="working"] {
+  animation: tritium-stage-working 5.2s ease-in-out infinite;
+}
+
+.tritium-backdrop[data-tritium-backdrop="attention"] {
+  animation: tritium-stage-attention 1.8s ease-in-out infinite;
+}
+
+@keyframes tritium-stage-working {
+  0%,
+  100% {
+    box-shadow: inset 0 0 90px -30px color-mix(in srgb, var(--tritium-accent) 40%, transparent);
+  }
+  50% {
+    box-shadow: inset 0 0 170px -20px color-mix(in srgb, var(--tritium-shift) 55%, transparent);
+  }
+}
+
+@keyframes tritium-stage-attention {
+  0%,
+  100% {
+    box-shadow: inset 0 0 80px -30px color-mix(in srgb, var(--warning) 30%, transparent);
+  }
+  50% {
+    box-shadow: inset 0 0 150px -20px color-mix(in srgb, var(--warning) 55%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tritium-backdrop[data-tritium-backdrop] {
+    animation: none;
+  }
 }
 
 /* Fork: the sidebar holds its own backdrop canvas behind the thread list. */

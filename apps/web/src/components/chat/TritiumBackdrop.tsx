@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { observeResize } from "../../lib/observeResize";
 import {
   BACKDROP_CELL_HEIGHT,
+  BACKDROP_DEFAULT_COLUMN,
   BACKDROP_CHARS,
   BACKDROP_TUNING,
   BACKDROP_WAVE_PERIOD_MS,
@@ -24,6 +25,7 @@ const REDUCED_FRAME_MS = 500;
 const COLOR_REFRESH_MS = 1000;
 const BREATH_MS = 1800;
 const BREATH_DEPTH = 0.5;
+const SHIFT_MS = 5200;
 
 const randomChar = () => BACKDROP_CHARS[Math.floor(Math.random() * BACKDROP_CHARS.length)]!;
 
@@ -40,9 +42,9 @@ const relativeRect = (rect: DOMRect, origin: DOMRect): BackdropClearRect => ({
 });
 
 /**
- * Fork: the Tritium trefoil in drifting characters behind the chat; it races while the agent works
- * and breathes in the warning color while the agent waits on the user. The `rail` layout fills the
- * sidebar without the trefoil and lights up around rows marked `data-tritium-status`.
+ * Fork: drifting characters around the chat, with the Tritium trefoil only on an empty thread.
+ * Rings run in from the margins while the agent works and breathe in the warning color while it
+ * waits. The `rail` layout lights up around sidebar rows marked `data-tritium-status`.
  */
 export function TritiumBackdrop({
   mode,
@@ -69,6 +71,7 @@ export function TritiumBackdrop({
     let ink = "";
     let accent = "";
     let warning = "";
+    let shifted = "";
     let colorsReadAt = -Infinity;
     // Text marked `data-backdrop-clear` keeps the characters behind it faint, so it stays readable.
     let clearRects: BackdropClearRect[] = [];
@@ -90,6 +93,7 @@ export function TritiumBackdrop({
         ink = style.color;
         accent = style.borderTopColor;
         warning = style.outlineColor;
+        shifted = style.textDecorationColor;
         if (!rail) {
           const origin = canvas.getBoundingClientRect();
           clearRects = Array.from(document.querySelectorAll("[data-backdrop-clear]"), (element) => {
@@ -122,7 +126,11 @@ export function TritiumBackdrop({
       const breath = reduceMotion
         ? 1
         : 1 + BREATH_DEPTH * tuning.attention * Math.sin((now / BREATH_MS) * Math.PI * 2);
-      const frame = { phase, seconds, echo: tuning.echo };
+      const frame = { phase, seconds, echo: tuning.echo, knot: tuning.knot, pulse: tuning.pulse };
+      // While working the accent drifts to the shifted color and back.
+      const shift = reduceMotion
+        ? 0
+        : tuning.pulse * (0.5 - 0.5 * Math.cos((now / SHIFT_MS) * Math.PI * 2));
       const heatSeconds = reduceMotion ? 0 : now / 1000;
       context.clearRect(0, 0, width, height);
       for (let index = 0; index < cells.length; index++) {
@@ -148,7 +156,9 @@ export function TritiumBackdrop({
           continue;
         }
         // The accent turns to the warning color as attention rises; mid-blend draws both.
-        if (tuning.attention < 0.99) drawChar(char, cell, accent, alpha * (1 - tuning.attention));
+        const calm = alpha * (1 - tuning.attention);
+        if (calm * (1 - shift) > 0.005) drawChar(char, cell, accent, calm * (1 - shift));
+        if (calm * shift > 0.005) drawChar(char, cell, shifted, calm * shift);
         if (tuning.attention > 0.01) drawChar(char, cell, warning, alpha * tuning.attention);
       }
       context.globalAlpha = 1;
@@ -165,7 +175,12 @@ export function TritiumBackdrop({
       context.font = `${BACKDROP_CELL_HEIGHT - 1}px ui-monospace, SFMono-Regular, Menlo, monospace`;
       context.textAlign = "center";
       context.textBaseline = "middle";
-      cells = buildBackdropCells(width, height, Math.random, layout);
+      // The canvas carries the chat column width in `text-indent`, a length or a percentage.
+      const indent = getComputedStyle(canvas).textIndent;
+      const column = indent.endsWith("%")
+        ? (width * Number.parseFloat(indent)) / 100
+        : Number.parseFloat(indent) || BACKDROP_DEFAULT_COLUMN;
+      cells = buildBackdropCells(width, height, Math.random, layout, column);
       chars = cells.map(randomChar);
       colorsReadAt = -Infinity;
       draw(performance.now());

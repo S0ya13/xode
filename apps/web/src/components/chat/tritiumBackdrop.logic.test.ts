@@ -30,14 +30,24 @@ describe("buildBackdropCells", () => {
     expect(cells.at(-1)!.side).toBeGreaterThan(0.7);
   });
 
+  it("keeps the chat column clear and fills the margins beside it", () => {
+    const cells = buildBackdropCells(1200, 600, () => 0.5, "stage", 736);
+    const middle = cells.find((cell) => Math.abs(cell.x - 600) < 4 && Math.abs(cell.y - 300) < 6)!;
+    expect(middle.side).toBe(0);
+    expect(cells[0]!.side).toBeGreaterThan(0.9);
+    // A full-width chat still leaves a band at its edges.
+    const full = buildBackdropCells(1200, 600, () => 0.5, "stage", 1200);
+    expect(full[0]!.side).toBeGreaterThan(0.5);
+  });
+
   it("returns nothing for an empty area", () => {
     expect(buildBackdropCells(0, 400)).toEqual([]);
   });
 });
 
 describe("paintBackdropCell", () => {
-  const base = { x: 300, y: 200, core: 0, halo: 0, side: 0, along: 0, seed: 0.5 };
-  const still = { phase: 0, seconds: 0, echo: 0 };
+  const base = { x: 300, y: 200, core: 0, halo: 0, side: 0, inward: 200, along: 0, seed: 0.5 };
+  const still = { phase: 0, seconds: 0, echo: 0, knot: 1, pulse: 0 };
 
   it("lights a cell on the line in the accent tone", () => {
     expect(paintBackdropCell({ ...base, core: 1, halo: 1 }, still)).toEqual({
@@ -48,6 +58,20 @@ describe("paintBackdropCell", () => {
 
   it("leaves a middle cell off the line empty", () => {
     expect(paintBackdropCell(base, still)).toBeNull();
+  });
+
+  it("hides the trefoil once the thread runs", () => {
+    expect(paintBackdropCell({ ...base, core: 1, halo: 1 }, { ...still, knot: 0 })).toBeNull();
+  });
+
+  it("runs rings through the margins while working", () => {
+    const margin = { ...base, side: 1, seed: 0.1 };
+    const working = { ...still, knot: 0, pulse: 1 };
+    // A crest of the ring lights the cell; the trough between crests leaves it empty.
+    const crest = (0.5 * Math.PI) / 0.045;
+    const trough = (1.5 * Math.PI) / 0.045;
+    expect(paintBackdropCell({ ...margin, inward: crest }, working)?.tone).toBe("accent");
+    expect(paintBackdropCell({ ...margin, inward: trough }, working)).toBeNull();
   });
 });
 
@@ -73,7 +97,16 @@ describe("easeBackdropTuning", () => {
 });
 
 describe("paintBackdropHeat", () => {
-  const cell = (x: number, y: number) => ({ x, y, core: 0, halo: 0, side: 0, along: 0, seed: 0 });
+  const cell = (x: number, y: number) => ({
+    x,
+    y,
+    core: 0,
+    halo: 0,
+    side: 0,
+    inward: 0,
+    along: 0,
+    seed: 0,
+  });
   const row = { left: 10, top: 100, right: 230, bottom: 140 };
 
   it("lights the edge of a working row, keeps its inside dim and leaves distant cells alone", () => {

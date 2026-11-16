@@ -19,8 +19,10 @@ export interface BackdropCell {
   readonly core: number;
   /** Soft glow around the line, 0 to 1. */
   readonly halo: number;
-  /** How far toward the left or right edge the cell sits, 0 at the middle. */
+  /** 0 over the chat column, rising to 1 in the margins and thickest in the corners. */
   readonly side: number;
+  /** Distance in pixels to the nearest edge of the area; rings run inward along it. */
+  readonly inward: number;
   /** Where along the trefoil the nearest point lies, 0 to 1. */
   readonly along: number;
   /** Fixed per cell, so sparse cells stay put between frames. */
@@ -43,11 +45,27 @@ export type BackdropLayout = "stage" | "rail";
 // The rail's clouds thicken toward the bottom, so the header and top rows stay clean.
 const railSide = (y: number, height: number) => 0.8 * smoothstep(0.1, 1, y / height);
 
+/** Width of the chat column, the default `--chat-content-max-width` of 46rem. */
+export const BACKDROP_DEFAULT_COLUMN = 736;
+// Even a full-width chat leaves this band at each side for the margins.
+const MIN_MARGIN = 48;
+const MARGIN_FADE = 140;
+
+// The margins beside the chat column, so characters never sit behind its text.
+const stageSide = (x: number, y: number, width: number, height: number, column: number) => {
+  const half = width / 2;
+  const inner = Math.max(0, Math.min(column / 2, half - MIN_MARGIN));
+  const outer = Math.min(inner + MARGIN_FADE, half);
+  const corner = smoothstep(0.4, 1, Math.abs(y - height / 2) / (height / 2));
+  return smoothstep(inner, outer, Math.abs(x - half)) * (0.55 + 0.45 * corner);
+};
+
 export function buildBackdropCells(
   width: number,
   height: number,
   random: () => number = Math.random,
   layout: BackdropLayout = "stage",
+  columnWidth: number = BACKDROP_DEFAULT_COLUMN,
 ): BackdropCell[] {
   if (width <= 0 || height <= 0) return [];
   const rail = layout === "rail";
@@ -91,9 +109,8 @@ export function buildBackdropCells(
         y,
         core,
         halo,
-        side: rail
-          ? railSide(y, height)
-          : smoothstep(0.4, 1.05, (Math.abs(x - centerX) / width) * 2),
+        side: rail ? railSide(y, height) : stageSide(x, y, width, height, columnWidth),
+        inward: Math.min(x, width - x, y, height - y),
         along,
         seed: random(),
       });
@@ -110,6 +127,10 @@ export interface BackdropFrame {
   readonly seconds: number;
   /** Weight of a second wave half a loop behind the first, 0 to 1. */
   readonly echo: number;
+  /** How much of the trefoil shows, 0 to 1. */
+  readonly knot: number;
+  /** 0 to 1: the margins trade drifting clouds for rings running in from the edges. */
+  readonly pulse: number;
 }
 
 const waveAt = (along: number, phase: number) => {
@@ -128,7 +149,7 @@ export function paintBackdropCell(
     waveAt(cell.along, frame.phase),
     frame.echo * waveAt(cell.along, frame.phase + 0.5),
   );
-  const knot = cell.core * (0.5 + 0.5 * wave) + cell.halo * 0.16;
+  const knot = frame.knot * (cell.core * (0.5 + 0.5 * wave) + cell.halo * 0.16);
   if (knot > 0.06) {
     return { alpha: Math.min(1, knot), tone: cell.core > 0.3 ? "accent" : "ink" };
   }
@@ -138,11 +159,17 @@ export function paintBackdropCell(
     0.5 +
     0.25 * Math.sin(cell.x * 0.018 + seconds * 0.22) * Math.sin(cell.y * 0.028 - seconds * 0.15) +
     0.25 * Math.sin((cell.x * 0.7 + cell.y) * 0.011 + seconds * 0.17);
-  const density = cell.side * smoothstep(0.35, 0.9, cloud);
+  const ring = 0.5 + 0.5 * Math.sin(cell.inward * 0.045 - seconds * 2);
+  const field = cloud + (ring - cloud) * frame.pulse;
+  const density = cell.side * smoothstep(0.35, 0.9, field);
   if (cell.seed < density * 0.85) {
-    return { alpha: 0.12 + 0.38 * density, tone: density > 0.6 ? "accent" : "ink" };
+    // While working nearly every margin character takes the accent and burns brighter.
+    return {
+      alpha: 0.12 + (0.38 + 0.25 * frame.pulse) * density,
+      tone: density > 0.6 * (1 - frame.pulse) + 0.05 ? "accent" : "ink",
+    };
   }
-  if (cell.seed > 0.985) return { alpha: 0.08, tone: "ink" };
+  if (cell.seed > 0.985 && cell.side > 0) return { alpha: 0.08, tone: "ink" };
   return null;
 }
 
@@ -157,15 +184,19 @@ export interface BackdropTuning {
   /** Chance per frame that a cell changes its character. */
   readonly churn: number;
   readonly echo: number;
-  /** 0 to 1: the trefoil breathes in the warning color while the agent waits on the user. */
+  /** 0 to 1: the margins breathe in the warning color while the agent waits on the user. */
   readonly attention: number;
+  /** 0 to 1: only the empty thread shows the trefoil; a running one keeps its middle clear. */
+  readonly knot: number;
+  /** 0 to 1: rings run in from the edges and the accent drifts toward violet while the agent works. */
+  readonly pulse: number;
 }
 
 export const BACKDROP_TUNING: Record<BackdropMode, BackdropTuning> = {
-  hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0 },
-  idle: { strength: 0.28, speed: 0.6, churn: 0.008, echo: 0, attention: 0 },
-  working: { strength: 0.8, speed: 4, churn: 0.09, echo: 1, attention: 0 },
-  attention: { strength: 0.75, speed: 0.5, churn: 0.015, echo: 0, attention: 1 },
+  hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0, knot: 1, pulse: 0 },
+  idle: { strength: 0.3, speed: 0.6, churn: 0.008, echo: 0, attention: 0, knot: 0, pulse: 0 },
+  working: { strength: 0.9, speed: 4, churn: 0.09, echo: 1, attention: 0, knot: 0, pulse: 1 },
+  attention: { strength: 0.8, speed: 0.5, churn: 0.015, echo: 0, attention: 1, knot: 0, pulse: 0 },
 };
 
 export const BACKDROP_WAVE_PERIOD_MS = WAVE_PERIOD_MS;
@@ -185,6 +216,8 @@ export function easeBackdropTuning(
     churn: ease(current.churn, target.churn),
     echo: ease(current.echo, target.echo),
     attention: ease(current.attention, target.attention),
+    knot: ease(current.knot, target.knot),
+    pulse: ease(current.pulse, target.pulse),
   };
 }
 
