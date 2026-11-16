@@ -165,7 +165,7 @@ export function TritiumBackdrop({
         const heat = hotRects.length > 0 ? paintBackdropHeat(cell, hotRects, heatSeconds) : null;
         const paint = heat ? null : paintBackdropCell(cell, frame);
         if (!heat && !paint) continue;
-        if (!reduceMotion && Math.random() < (heat ? 0.15 : tuning.churn)) {
+        if (!reduceMotion && Math.random() < (heat ? 0.04 : tuning.churn)) {
           chars[index] = randomChar();
         }
         const char = chars[index]!;

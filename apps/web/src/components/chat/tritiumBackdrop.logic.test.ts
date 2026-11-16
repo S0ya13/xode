@@ -51,7 +51,7 @@ describe("buildBackdropCells", () => {
 });
 
 describe("paintBackdropCell", () => {
-  const base = { x: 300, y: 200, core: 0, halo: 0, side: 0, inward: 200, along: 0, seed: 0.5 };
+  const base = { x: 300, y: 200, core: 0, halo: 0, side: 0, along: 0, seed: 0.5 };
   const still = { phase: 0, seconds: 0, echo: 0, knot: 1, pulse: 0 };
 
   it("lights a cell on the line in the accent tone", () => {
@@ -69,14 +69,21 @@ describe("paintBackdropCell", () => {
     expect(paintBackdropCell({ ...base, core: 1, halo: 1 }, { ...still, knot: 0 })).toBeNull();
   });
 
-  it("runs rings through the margins while working", () => {
-    const margin = { ...base, side: 1, seed: 0.1 };
-    const working = { ...still, knot: 0, pulse: 1 };
-    // A crest of the ring lights the cell; the trough between crests leaves it empty.
-    const crest = (0.5 * Math.PI) / 0.03;
-    const trough = (1.5 * Math.PI) / 0.03;
-    expect(paintBackdropCell({ ...margin, inward: crest }, working)?.tone).toBe("accent");
-    expect(paintBackdropCell({ ...margin, inward: trough }, working)).toBeNull();
+  it("runs currents through the margins while working", () => {
+    const strip = Array.from({ length: 80 }, (_, row) => ({
+      ...base,
+      y: row * 10,
+      side: 1,
+      seed: 0.3,
+    }));
+    const lit = (seconds: number) =>
+      strip
+        .map((cell) => (paintBackdropCell(cell, { ...still, knot: 0, pulse: 1, seconds }) ? 1 : 0))
+        .join("");
+    // The strip holds bands and gaps, and they move as time passes.
+    expect(lit(0)).toMatch(/1/);
+    expect(lit(0)).toMatch(/0/);
+    expect(lit(1)).not.toBe(lit(0));
   });
 });
 
@@ -108,28 +115,22 @@ describe("paintBackdropHeat", () => {
     core: 0,
     halo: 0,
     side: 0,
-    inward: 0,
     along: 0,
     seed: 0,
   });
   const row = { left: 10, top: 100, right: 230, bottom: 140 };
 
-  it("lights the edge of a working row, keeps its inside dim and leaves distant cells alone", () => {
+  it("gathers characters around a working row, spilling past its box", () => {
     const rects = [{ ...row, tone: "working" as const }];
-    // At this moment the band peaks on the cell just below the row.
-    const edge = paintBackdropHeat(
-      cell(120, 146),
+    // Above the row's middle, outside its box, at a moment the drift peaks there.
+    const above = paintBackdropHeat(
+      cell(120, 88),
       rects,
-      (120 * 0.07 + 146 * 0.03 - Math.PI / 2) / 6,
+      (120 * 0.05 + 88 * 0.02 - Math.PI / 2) / 2.4,
     );
-    const inside = paintBackdropHeat(
-      cell(120, 120),
-      rects,
-      (120 * 0.07 + 120 * 0.03 - Math.PI / 2) / 6,
-    );
-    expect(edge?.tone).toBe("accent");
-    expect(edge!.alpha).toBeGreaterThan(inside!.alpha);
+    expect(above?.tone).toBe("accent");
     expect(paintBackdropHeat(cell(120, 300), rects, 0)).toBeNull();
+    expect(paintBackdropHeat(cell(400, 120), rects, 0)).toBeNull();
   });
 
   it("glows in the warning tone around a row waiting on the user", () => {

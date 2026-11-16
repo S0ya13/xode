@@ -21,8 +21,6 @@ export interface BackdropCell {
   readonly halo: number;
   /** 0 over the chat column, rising to 1 in the margins and thickest in the corners. */
   readonly side: number;
-  /** Distance in pixels to the nearest edge of the area; rings run inward along it. */
-  readonly inward: number;
   /** Where along the trefoil the nearest point lies, 0 to 1. */
   readonly along: number;
   /** Fixed per cell, so sparse cells stay put between frames. */
@@ -123,7 +121,6 @@ export function buildBackdropCells(
         core,
         halo,
         side: rail ? railSide(y, height) : stageSide(x, y, width, height, columnWidth),
-        inward: Math.min(x, width - x, y, height - y),
         along,
         seed: random(),
       });
@@ -142,7 +139,7 @@ export interface BackdropFrame {
   readonly echo: number;
   /** How much of the trefoil shows, 0 to 1. */
   readonly knot: number;
-  /** 0 to 1: the margins trade drifting clouds for rings running in from the edges. */
+  /** 0 to 1: the margins trade drifting clouds for currents rising along the sides. */
   readonly pulse: number;
 }
 
@@ -172,14 +169,18 @@ export function paintBackdropCell(
     0.5 +
     0.25 * Math.sin(cell.x * 0.018 + seconds * 0.22) * Math.sin(cell.y * 0.028 - seconds * 0.15) +
     0.25 * Math.sin((cell.x * 0.7 + cell.y) * 0.011 + seconds * 0.17);
-  const ring = 0.5 + 0.5 * Math.sin(cell.inward * 0.03 - seconds * 1.2);
-  const field = cloud + (ring - cloud) * frame.pulse;
+  const current =
+    0.5 +
+    0.3 *
+      Math.sin(cell.x * 0.035 + 1.6 * Math.sin(cell.y * 0.011 + seconds * 0.35)) *
+      Math.sin(cell.y * 0.024 + seconds * 1.1) +
+    0.2 * Math.sin((cell.x * 0.4 - cell.y) * 0.013 + seconds * 0.6);
+  const field = cloud + (current - cloud) * frame.pulse;
   const density = cell.side * smoothstep(0.35, 0.9, field);
   if (cell.seed < density * 0.85) {
-    // While working nearly every margin character takes the accent.
     return {
       alpha: 0.12 + 0.38 * density,
-      tone: density > 0.6 * (1 - frame.pulse) + 0.05 ? "accent" : "ink",
+      tone: density > 0.6 - 0.2 * frame.pulse ? "accent" : "ink",
     };
   }
   if (cell.seed > 0.985 && cell.side > 0.3) return { alpha: 0.08 * cell.side, tone: "ink" };
@@ -201,14 +202,14 @@ export interface BackdropTuning {
   readonly attention: number;
   /** 0 to 1: only the empty thread shows the trefoil; a running one keeps its middle clear. */
   readonly knot: number;
-  /** 0 to 1: slow rings run in from the edges while the agent works. */
+  /** 0 to 1: currents rise through the margins while the agent works. */
   readonly pulse: number;
 }
 
 export const BACKDROP_TUNING: Record<BackdropMode, BackdropTuning> = {
   hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0, knot: 1, pulse: 0 },
   idle: { strength: 0.3, speed: 0.6, churn: 0.008, echo: 0, attention: 0, knot: 0, pulse: 0 },
-  working: { strength: 0.6, speed: 1.6, churn: 0.02, echo: 1, attention: 0, knot: 0, pulse: 1 },
+  working: { strength: 0.5, speed: 1.4, churn: 0.012, echo: 1, attention: 0, knot: 0, pulse: 1 },
   attention: { strength: 0.6, speed: 0.5, churn: 0.01, echo: 0, attention: 1, knot: 0, pulse: 0 },
 };
 
@@ -268,10 +269,12 @@ export interface BackdropHotRect extends BackdropClearRect {
   readonly tone: "working" | "attention";
 }
 
-const HEAT_FEATHER = 14;
-const INSIDE_HEAT = 0.3;
+// How far the cluster spills past the row's box.
+const HEAT_REACH = 26;
+// Behind the row's own text the characters stay faint, fading in over this depth.
+const TEXT_FEATHER = 12;
 
-/** Characters streaming through a working row, or breathing around a waiting one; null elsewhere. */
+/** A cluster of characters around a working or waiting row, shaped loosely so it has no box edges. */
 export function paintBackdropHeat(
   cell: BackdropCell,
   rects: ReadonlyArray<BackdropHotRect>,
@@ -279,20 +282,31 @@ export function paintBackdropHeat(
 ): { readonly alpha: number; readonly tone: "accent" | "warning" } | null {
   let best: { alpha: number; tone: "accent" | "warning" } | null = null;
   for (const rect of rects) {
-    const dx = Math.max(rect.left - cell.x, 0, cell.x - rect.right);
-    const dy = Math.max(rect.top - cell.y, 0, cell.y - rect.bottom);
-    const distance = Math.hypot(dx, dy);
-    // Inside the row the characters stay dim behind its text; the glow sits around its edges.
-    const heat = distance === 0 ? INSIDE_HEAT : 1 - smoothstep(0, HEAT_FEATHER, distance);
+    const centerX = (rect.left + rect.right) / 2;
+    const centerY = (rect.top + rect.bottom) / 2;
+    const dx = (cell.x - centerX) / ((rect.right - rect.left) / 2 + HEAT_REACH);
+    const dy = (cell.y - centerY) / ((rect.bottom - rect.top) / 2 + HEAT_REACH);
+    const angle = Math.atan2(dy, dx);
+    const wobble =
+      0.12 * Math.sin(angle * 3 + seconds * 0.8 + centerY * 0.05) +
+      0.08 * Math.sin(angle * 5 - seconds * 1.1);
+    const heat = 1 - smoothstep(0.35, 1, Math.hypot(dx, dy) - wobble);
     if (heat <= 0) continue;
-    // Working rows carry bands that run left to right; waiting rows glow as one.
+    const depth = Math.min(
+      cell.x - rect.left,
+      rect.right - cell.x,
+      cell.y - rect.top,
+      rect.bottom - cell.y,
+    );
+    const behindText = 1 - 0.5 * smoothstep(0, TEXT_FEATHER, depth);
+    // Working clusters drift left to right; waiting ones breathe.
     const pulse =
       rect.tone === "working"
-        ? 0.5 + 0.5 * Math.sin(cell.x * 0.07 - seconds * 6 + cell.y * 0.03)
-        : 0.55 + 0.45 * Math.sin(seconds * 3.2);
-    const density = heat * pulse;
-    if (cell.seed > density * 0.7) continue;
-    const alpha = 0.12 + 0.4 * density;
+        ? 0.55 + 0.45 * Math.sin(cell.x * 0.05 - seconds * 2.4 + cell.y * 0.02)
+        : 0.6 + 0.4 * Math.sin(seconds * 2);
+    const density = heat * pulse * behindText;
+    if (cell.seed > density * 0.75) continue;
+    const alpha = 0.1 + 0.42 * density;
     if (!best || alpha > best.alpha) {
       best = { alpha, tone: rect.tone === "working" ? "accent" : "warning" };
     }
