@@ -8,6 +8,7 @@ import {
   buildBackdropCells,
   easeBackdropTuning,
   paintBackdropCell,
+  paintBackdropHeat,
 } from "./tritiumBackdrop.logic";
 
 describe("buildBackdropCells", () => {
@@ -20,6 +21,13 @@ describe("buildBackdropCells", () => {
     expect(Math.max(...cells.map((cell) => cell.core))).toBeGreaterThan(0.9);
     expect(cells[0]!.core).toBe(0);
     expect(cells[0]!.side).toBeGreaterThan(0.9);
+  });
+
+  it("leaves the trefoil out of the rail and thickens its clouds toward the bottom", () => {
+    const cells = buildBackdropCells(240, 600, () => 0.5, "rail");
+    expect(Math.max(...cells.map((cell) => cell.core))).toBe(0);
+    expect(cells[0]!.side).toBe(0);
+    expect(cells.at(-1)!.side).toBeGreaterThan(0.7);
   });
 
   it("returns nothing for an empty area", () => {
@@ -61,5 +69,33 @@ describe("easeBackdropTuning", () => {
     expect(halfway.speed).toBeLessThan(working.speed);
     expect(easeBackdropTuning(idle, working, 10_000).speed).toBeCloseTo(working.speed);
     expect(easeBackdropTuning(idle, working, 0)).toEqual(idle);
+  });
+});
+
+describe("paintBackdropHeat", () => {
+  const cell = (x: number, y: number) => ({ x, y, core: 0, halo: 0, side: 0, along: 0, seed: 0 });
+  const row = { left: 10, top: 100, right: 230, bottom: 140 };
+
+  it("lights the edge of a working row, keeps its inside dim and leaves distant cells alone", () => {
+    const rects = [{ ...row, tone: "working" as const }];
+    // At this moment the band peaks on the cell just below the row.
+    const edge = paintBackdropHeat(
+      cell(120, 146),
+      rects,
+      (120 * 0.07 + 146 * 0.03 - Math.PI / 2) / 6,
+    );
+    const inside = paintBackdropHeat(
+      cell(120, 120),
+      rects,
+      (120 * 0.07 + 120 * 0.03 - Math.PI / 2) / 6,
+    );
+    expect(edge?.tone).toBe("accent");
+    expect(edge!.alpha).toBeGreaterThan(inside!.alpha);
+    expect(paintBackdropHeat(cell(120, 300), rects, 0)).toBeNull();
+  });
+
+  it("glows in the warning tone around a row waiting on the user", () => {
+    const rects = [{ ...row, tone: "attention" as const }];
+    expect(paintBackdropHeat(cell(120, 144), rects, 0)?.tone).toBe("warning");
   });
 });

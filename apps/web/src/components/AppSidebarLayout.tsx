@@ -44,6 +44,7 @@ import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
 import { isAppModalPage } from "./sidebar/mainAppLocation";
 import type { SidebarRouteReveal } from "./sidebar/routeReveal";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
+import { TritiumBackdrop } from "./chat/TritiumBackdrop";
 import {
   clampThreadSidebarWidth,
   resolveInitialThreadSidebarWidth,
@@ -487,6 +488,7 @@ export function AppSidebarLayout({
               }}
               style={windowControlsInsetStyle}
             >
+              <TritiumBackdrop mode="idle" layout="rail" />
               <ThreadSidebar routeReveal={sidebarRouteReveal} />
               <SidebarRail onDoubleClick={resetSidebarWidth} />
             </Sidebar>

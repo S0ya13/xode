@@ -37,12 +37,20 @@ const smoothstep = (from: number, to: number, value: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/** `stage` draws the trefoil behind the chat; `rail` is the sidebar's knotless cloud field. */
+export type BackdropLayout = "stage" | "rail";
+
+// The rail's clouds thicken toward the bottom, so the header and top rows stay clean.
+const railSide = (y: number, height: number) => 0.8 * smoothstep(0.1, 1, y / height);
+
 export function buildBackdropCells(
   width: number,
   height: number,
   random: () => number = Math.random,
+  layout: BackdropLayout = "stage",
 ): BackdropCell[] {
   if (width <= 0 || height <= 0) return [];
+  const rail = layout === "rail";
   const scale = Math.min(width, height) * 0.1;
   const centerX = width / 2;
   const centerY = height * 0.42;
@@ -65,7 +73,7 @@ export function buildBackdropCells(
       let core = 0;
       let halo = 0;
       let along = 0;
-      if (Math.abs(x - centerX) <= knotRadius && Math.abs(y - centerY) <= knotRadius) {
+      if (!rail && Math.abs(x - centerX) <= knotRadius && Math.abs(y - centerY) <= knotRadius) {
         let nearest = Infinity;
         for (let index = 0; index < points.length; index++) {
           const point = points[index]!;
@@ -83,7 +91,9 @@ export function buildBackdropCells(
         y,
         core,
         halo,
-        side: smoothstep(0.4, 1.05, (Math.abs(x - centerX) / width) * 2),
+        side: rail
+          ? railSide(y, height)
+          : smoothstep(0.4, 1.05, (Math.abs(x - centerX) / width) * 2),
         along,
         seed: random(),
       });
@@ -153,9 +163,9 @@ export interface BackdropTuning {
 
 export const BACKDROP_TUNING: Record<BackdropMode, BackdropTuning> = {
   hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0 },
-  idle: { strength: 0.2, speed: 0.6, churn: 0.006, echo: 0, attention: 0 },
-  working: { strength: 0.45, speed: 3, churn: 0.05, echo: 1, attention: 0 },
-  attention: { strength: 0.4, speed: 0.4, churn: 0.01, echo: 0, attention: 1 },
+  idle: { strength: 0.28, speed: 0.6, churn: 0.008, echo: 0, attention: 0 },
+  working: { strength: 0.8, speed: 4, churn: 0.09, echo: 1, attention: 0 },
+  attention: { strength: 0.75, speed: 0.5, churn: 0.015, echo: 0, attention: 1 },
 };
 
 export const BACKDROP_WAVE_PERIOD_MS = WAVE_PERIOD_MS;
@@ -205,4 +215,41 @@ export function backdropClearance(
     );
   }
   return factor;
+}
+
+/** A sidebar row whose thread is busy or waiting; the characters around it light up. */
+export interface BackdropHotRect extends BackdropClearRect {
+  readonly tone: "working" | "attention";
+}
+
+const HEAT_FEATHER = 14;
+const INSIDE_HEAT = 0.3;
+
+/** Characters streaming through a working row, or breathing around a waiting one; null elsewhere. */
+export function paintBackdropHeat(
+  cell: BackdropCell,
+  rects: ReadonlyArray<BackdropHotRect>,
+  seconds: number,
+): { readonly alpha: number; readonly tone: "accent" | "warning" } | null {
+  let best: { alpha: number; tone: "accent" | "warning" } | null = null;
+  for (const rect of rects) {
+    const dx = Math.max(rect.left - cell.x, 0, cell.x - rect.right);
+    const dy = Math.max(rect.top - cell.y, 0, cell.y - rect.bottom);
+    const distance = Math.hypot(dx, dy);
+    // Inside the row the characters stay dim behind its text; the glow sits around its edges.
+    const heat = distance === 0 ? INSIDE_HEAT : 1 - smoothstep(0, HEAT_FEATHER, distance);
+    if (heat <= 0) continue;
+    // Working rows carry bands that run left to right; waiting rows glow as one.
+    const pulse =
+      rect.tone === "working"
+        ? 0.5 + 0.5 * Math.sin(cell.x * 0.07 - seconds * 6 + cell.y * 0.03)
+        : 0.55 + 0.45 * Math.sin(seconds * 3.2);
+    const density = heat * pulse;
+    if (cell.seed > density * 0.7) continue;
+    const alpha = 0.12 + 0.4 * density;
+    if (!best || alpha > best.alpha) {
+      best = { alpha, tone: rect.tone === "working" ? "accent" : "warning" };
+    }
+  }
+  return best;
 }

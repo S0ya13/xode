@@ -739,6 +739,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     wokeAtDate !== null &&
     (lastVisitedDate === null || lastVisitedDate < wokeAtDate) &&
     thread.settledOverride !== "settled";
+  // Fork: the sidebar backdrop streams around working rows and glows around ones waiting on you.
+  const tritiumStatus =
+    status === "preparing" || status === "working"
+      ? "working"
+      : status === "approval" || status === "input" || status === "request"
+        ? "attention"
+        : undefined;
   const shouldRecede = shouldRecedeSidebarThread({
     status,
     isUnread,
@@ -1240,6 +1247,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 tabIndex={0}
                 data-sidebar-row={threadKey}
                 data-sidebar-parent={props.navigationParent}
+                data-tritium-status={tritiumStatus}
                 aria-label={accessibility.label}
                 aria-current={accessibility.current}
                 data-testid={inFolder ? "sidebar-row-folder" : "sidebar-row-slim"}
@@ -1437,6 +1445,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               tabIndex={0}
               data-sidebar-row={threadKey}
               data-sidebar-parent={props.navigationParent}
+              data-tritium-status={tritiumStatus}
               aria-label={accessibility.label}
               aria-current={accessibility.current}
               data-testid="sidebar-row-card"

@@ -2648,3 +2648,55 @@ code {
   border: 0 solid light-dark(#1f5fa8, #7cc6ff);
   outline-color: var(--warning);
 }
+
+/* Fork: the sidebar holds its own backdrop canvas behind the thread list. */
+[data-app-sidebar] [data-slot="sidebar-inner"] {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Fork: a sidebar row whose thread works carries an accent edge and a light sweeping across it;
+   one waiting on you breathes in the warning color. */
+[data-tritium-status] {
+  --tritium-row-tone: light-dark(#1f5fa8, #7cc6ff);
+  box-shadow: inset 2px 0 0 var(--tritium-row-tone);
+}
+[data-tritium-status="attention"] {
+  --tritium-row-tone: var(--warning);
+  animation: tritium-row-breathe 1.8s ease-in-out infinite;
+}
+[data-tritium-status="working"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--tritium-row-tone) 16%, transparent),
+    transparent
+  );
+  animation: tritium-row-sweep 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes tritium-row-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(225%);
+  }
+}
+@keyframes tritium-row-breathe {
+  50% {
+    box-shadow:
+      inset 2px 0 0 var(--tritium-row-tone),
+      inset 0 0 18px -6px var(--tritium-row-tone);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tritium-status],
+  [data-tritium-status]::after {
+    animation: none;
+  }
+}
