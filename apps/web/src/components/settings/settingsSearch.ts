@@ -348,6 +348,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["wide full width column layout messages composer monitor"],
   },
   {
+    id: "backdrop-style",
+    title: "Background animation",
+    to: "/settings/appearance",
+    searchTerms: ["backdrop characters aura waves particles motion animated tritium"],
+  },
+  {
     id: "thread-details-items",
     title: "Thread details",
     to: "/settings/appearance",

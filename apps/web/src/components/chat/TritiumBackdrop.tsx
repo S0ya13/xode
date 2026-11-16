@@ -18,6 +18,14 @@ import {
   type BackdropLayout,
   type BackdropMode,
 } from "./tritiumBackdrop.logic";
+import {
+  createParticles,
+  drawAura,
+  drawParticles,
+  drawWaves,
+  maskStage,
+  type BackdropParticle,
+} from "./tritiumBackdropStyles";
 
 const FRAME_MS = 50;
 // Reduced motion keeps the trefoil still and only follows mode changes.
@@ -31,6 +39,14 @@ const randomChar = () => BACKDROP_CHARS[Math.floor(Math.random() * BACKDROP_CHAR
 const readMode = (canvas: HTMLCanvasElement): BackdropMode => {
   const mode = canvas.dataset.tritiumBackdrop;
   return mode === "hero" || mode === "working" || mode === "attention" ? mode : "idle";
+};
+
+// The style setting lands on the root element, so a change applies on the next frame.
+const readStyle = () => {
+  const style = document.documentElement.dataset.backdropStyle;
+  return style === "aura" || style === "waves" || style === "particles" || style === "off"
+    ? style
+    : "characters";
 };
 
 const relativeRect = (rect: DOMRect, origin: DOMRect): BackdropClearRect => ({
@@ -65,6 +81,8 @@ export function TritiumBackdrop({
     let chars: string[] = [];
     let width = 0;
     let height = 0;
+    let column = BACKDROP_DEFAULT_COLUMN;
+    let particles: BackdropParticle[] = [];
     // The class resolves theme colors: text is the ink, the border the accent, the outline the
     // warning color.
     let ink = "";
@@ -126,8 +144,24 @@ export function TritiumBackdrop({
       const frame = { phase, seconds, echo: tuning.echo, knot: tuning.knot, pulse: tuning.pulse };
       const heatSeconds = reduceMotion ? 0 : now / 1000;
       context.clearRect(0, 0, width, height);
+      const style = readStyle();
+      if (style === "off") return;
+      // The abstract styles fill the stage margins; characters still draw the trefoil and the rail.
+      const shapes = !rail && style !== "characters";
+      if (shapes) {
+        const styleFrame = { context, width, height, column, seconds, tuning, accent, warning };
+        if (style === "aura") drawAura(styleFrame);
+        else if (style === "waves") drawWaves(styleFrame);
+        else drawParticles(styleFrame, particles);
+        maskStage(styleFrame);
+        if (tuning.knot < 0.01) {
+          context.globalAlpha = 1;
+          return;
+        }
+      }
       for (let index = 0; index < cells.length; index++) {
         const cell = cells[index]!;
+        if (shapes && cell.halo === 0) continue;
         const heat = hotRects.length > 0 ? paintBackdropHeat(cell, hotRects, heatSeconds) : null;
         const paint = heat ? null : paintBackdropCell(cell, frame);
         if (!heat && !paint) continue;
@@ -168,10 +202,11 @@ export function TritiumBackdrop({
       context.textBaseline = "middle";
       // The canvas carries the chat column width in `text-indent`, a length or a percentage.
       const indent = getComputedStyle(canvas).textIndent;
-      const column = indent.endsWith("%")
+      column = indent.endsWith("%")
         ? (width * Number.parseFloat(indent)) / 100
         : Number.parseFloat(indent) || BACKDROP_DEFAULT_COLUMN;
       cells = buildBackdropCells(width, height, Math.random, layout, column);
+      particles = createParticles(Math.round(height / 9));
       chars = cells.map(randomChar);
       colorsReadAt = -Infinity;
       draw(performance.now());

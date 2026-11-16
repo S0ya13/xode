@@ -2684,6 +2684,10 @@ code {
   }
 }
 
+:root[data-backdrop-style="off"] .tritium-backdrop {
+  animation: none;
+}
+
 /* Fork: the sidebar holds its own backdrop canvas behind the thread list. */
 [data-app-sidebar] [data-slot="sidebar-inner"] {
   position: relative;

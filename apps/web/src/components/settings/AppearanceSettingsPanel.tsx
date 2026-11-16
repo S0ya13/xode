@@ -3,6 +3,7 @@ import { useState } from "react";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
+  type BackdropStyle,
   type ChatWidth,
   type EffortDisplay,
   type EnvironmentIdentificationMode,
@@ -78,6 +79,17 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   wide: "Wide",
   full: "Full",
 };
+
+const BACKDROP_STYLE_LABELS: Record<BackdropStyle, string> = {
+  characters: "Characters",
+  aura: "Aura",
+  waves: "Waves",
+  particles: "Particles",
+  off: "Off",
+};
+
+const isBackdropStyle = (value: unknown): value is BackdropStyle =>
+  typeof value === "string" && Object.hasOwn(BACKDROP_STYLE_LABELS, value);
 
 const EFFORT_DISPLAY_LABELS: Record<EffortDisplay, string> = {
   label: "Word",
@@ -284,6 +296,45 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("backdrop-style")}
+          description="Choose what moves at the sides of the chat. It speeds up while the agent works and glows warm while it waits on you."
+          resetAction={
+            settings.backdropStyle !== DEFAULT_UNIFIED_SETTINGS.backdropStyle ? (
+              <SettingResetButton
+                label="background animation"
+                onClick={() =>
+                  updateSettings({ backdropStyle: DEFAULT_UNIFIED_SETTINGS.backdropStyle })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.backdropStyle}
+                onValueChange={(value) => {
+                  if (isBackdropStyle(value)) updateSettings({ backdropStyle: value });
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-full min-w-0"
+                  aria-label="Background animation"
+                >
+                  <SelectValue>{BACKDROP_STYLE_LABELS[settings.backdropStyle]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="characters">Characters (default)</SelectItem>
+                  <SelectItem value="aura">Aura</SelectItem>
+                  <SelectItem value="waves">Waves</SelectItem>
+                  <SelectItem value="particles">Particles</SelectItem>
+                  <SelectItem value="off">Off</SelectItem>
                 </SelectPopup>
               </Select>
             </div>

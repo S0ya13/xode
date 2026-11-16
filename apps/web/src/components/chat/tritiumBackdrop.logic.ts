@@ -54,11 +54,20 @@ const MARGIN_FADE = 140;
 const TOP_FADE = 110;
 const BOTTOM_FADE = 50;
 
+/** How far from the middle the chat column reaches (`inner`) and where the margins are full (`outer`). */
+export function stageMargins(width: number, column: number) {
+  const half = width / 2;
+  const inner = Math.max(0, Math.min(column / 2, half - MIN_MARGIN));
+  return { inner, outer: Math.min(inner + MARGIN_FADE, half) };
+}
+
+export const BACKDROP_TOP_FADE = TOP_FADE;
+export const BACKDROP_BOTTOM_FADE = BOTTOM_FADE;
+
 // The margins beside the chat column, so characters never sit behind its text.
 const stageSide = (x: number, y: number, width: number, height: number, column: number) => {
   const half = width / 2;
-  const inner = Math.max(0, Math.min(column / 2, half - MIN_MARGIN));
-  const outer = Math.min(inner + MARGIN_FADE, half);
+  const { inner, outer } = stageMargins(width, column);
   const corner = smoothstep(0.4, 1, Math.abs(y - height / 2) / (height / 2));
   const rims = smoothstep(0, TOP_FADE, y) * smoothstep(0, BOTTOM_FADE, height - y);
   return smoothstep(inner, outer, Math.abs(x - half)) * (0.55 + 0.45 * corner) * rims;
