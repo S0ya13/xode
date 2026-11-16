@@ -2694,17 +2694,15 @@ code {
   isolation: isolate;
 }
 
-/* Fork: a sidebar row whose thread works carries an accent edge and a light sweeping across it;
-   one waiting on you breathes in the warning color. */
+/* Fork: a light sweeps across a sidebar row whose thread works, in the warning color while it
+   waits on you. */
 [data-tritium-status] {
   --tritium-row-tone: var(--app-theme-accent, var(--primary));
-  box-shadow: inset 2px 0 0 var(--tritium-row-tone);
 }
 [data-tritium-status="attention"] {
   --tritium-row-tone: var(--warning);
-  animation: tritium-row-breathe 1.8s ease-in-out infinite;
 }
-[data-tritium-status="working"]::after {
+[data-tritium-status]::after {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
@@ -2718,6 +2716,9 @@ code {
   );
   animation: tritium-row-sweep 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
+[data-tritium-status="attention"]::after {
+  animation-duration: 3.6s;
+}
 @keyframes tritium-row-sweep {
   from {
     transform: translateX(-100%);
@@ -2726,15 +2727,7 @@ code {
     transform: translateX(225%);
   }
 }
-@keyframes tritium-row-breathe {
-  50% {
-    box-shadow:
-      inset 2px 0 0 var(--tritium-row-tone),
-      inset 0 0 18px -6px var(--tritium-row-tone);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  [data-tritium-status],
   [data-tritium-status]::after {
     animation: none;
   }
