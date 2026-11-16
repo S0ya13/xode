@@ -118,6 +118,7 @@ export class VoiceInputSession {
   private readonly listeners = new Set<() => void>();
   private readonly activityListeners = new Set<() => void>();
   private disposed = false;
+  private holdingSystemMedia = false;
 
   constructor(key: SessionKey) {
     this.key = key;
@@ -240,6 +241,7 @@ export class VoiceInputSession {
         target.commitDraft(text, selection);
       },
       onStateChange: (state) => {
+        this.syncSystemMedia(state.phase === "preparing" || state.phase === "recording");
         if (state.phase === "idle") this.settleSubmission(true);
         if (state.phase === "error") {
           if (this.submission)
@@ -334,10 +336,25 @@ export class VoiceInputSession {
 
   dispose(): void {
     this.disposed = true;
+    this.syncSystemMedia(false);
     this.settleSubmission(false);
     this.controller.dispose();
     this.listeners.clear();
     this.activityListeners.clear();
+  }
+
+  // Fork: quiets the Mac's own sound from pressing the microphone until the recording ends.
+  private syncSystemMedia(listening: boolean): void {
+    const desktop = typeof window === "undefined" ? undefined : window.desktopBridge;
+    if (listening && !this.holdingSystemMedia) {
+      const action = this.target?.readContext()?.clientSettings.dictationMediaAction ?? "none";
+      if (action === "none" || !desktop?.holdSystemMedia) return;
+      this.holdingSystemMedia = true;
+      void desktop.holdSystemMedia(action).catch(() => undefined);
+    } else if (!listening && this.holdingSystemMedia) {
+      this.holdingSystemMedia = false;
+      void desktop?.releaseSystemMedia?.().catch(() => undefined);
+    }
   }
 
   private settleSubmission(delivered: boolean): void {

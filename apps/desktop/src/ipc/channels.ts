@@ -142,3 +142,5 @@ export const TAKE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:take-legacy-local-stor
 export const COMPLETE_LEGACY_LOCAL_STORAGE_CHANNEL = "desktop:complete-legacy-local-storage";
 
 export const RESTART_AUDIO_SERVICE_CHANNEL = "desktop:restart-audio-service";
+export const HOLD_SYSTEM_MEDIA_CHANNEL = "desktop:hold-system-media";
+export const RELEASE_SYSTEM_MEDIA_CHANNEL = "desktop:release-system-media";

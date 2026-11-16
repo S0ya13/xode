@@ -45,6 +45,8 @@ import {
   openExternal,
   readMedia,
   restartAudioService,
+  holdSystemMedia,
+  releaseSystemMedia,
   openSystemSettings,
   checkSystemPermission,
   pasteAsText,
@@ -111,6 +113,8 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(getLocalEnvironmentBearerToken);
 
   yield* ipc.handle(restartAudioService);
+  yield* ipc.handle(holdSystemMedia);
+  yield* ipc.handle(releaseSystemMedia);
   yield* ipc.handle(getClientSettings);
   yield* ipc.handle(setClientSettings);
   yield* ipc.handle(getConnectionCatalog);

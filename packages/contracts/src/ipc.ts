@@ -1062,6 +1062,9 @@ export interface DesktopBridge {
   getPathForFile: (file: File) => string;
   getClientPlatform: () => string;
   restartAudioService?: () => Promise<boolean>;
+  /** Fork: pauses what plays or lowers the volume while the user dictates (macOS). */
+  holdSystemMedia?: (action: "lower" | "pause") => Promise<void>;
+  releaseSystemMedia?: () => Promise<void>;
   setNotificationBadge: (badge: { count: number; image: string | null }) => Promise<void>;
   onNotificationBadgeClear: (listener: () => void) => () => void;
   onTrackpadScrollBegin: (listener: () => void) => () => void;

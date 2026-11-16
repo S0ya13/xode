@@ -380,6 +380,10 @@ export type ModelPreferences = {
 export const VoiceShortcutMode = Schema.Literals(["auto", "hold", "toggle"]);
 export type VoiceShortcutMode = typeof VoiceShortcutMode.Type;
 
+/** Fork: what happens to the Mac's own sound while the user dictates. */
+export const DictationMediaAction = Schema.Literals(["none", "lower", "pause"]);
+export type DictationMediaAction = typeof DictationMediaAction.Type;
+
 export const VoiceMicrophoneEntry = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("default") }),
   Schema.Struct({ kind: Schema.Literal("device"), deviceId: Schema.String, label: Schema.String }),
@@ -575,6 +579,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   voiceShortcutMode: VoiceShortcutMode.pipe(Schema.withDecodingDefault(Effect.succeed("auto"))),
+  dictationMediaAction: DictationMediaAction.pipe(
+    Schema.withDecodingDefault(Effect.succeed("none" as const)),
+  ),
   speechLanguage: SpeechLanguage.pipe(Schema.withDecodingDefault(Effect.succeed("auto"))),
   speechTranslateToEnglish: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   speechCustomWords: SpeechCustomWords.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
@@ -2111,6 +2118,7 @@ export const ClientSettingsPatch = Schema.Struct({
   voiceMicrophone: Schema.optionalKey(Schema.String),
   voiceMicrophones: Schema.optionalKey(Schema.Array(VoiceMicrophoneEntry)),
   voiceShortcutMode: Schema.optionalKey(VoiceShortcutMode),
+  dictationMediaAction: Schema.optionalKey(DictationMediaAction),
   speechLanguage: Schema.optionalKey(SpeechLanguage),
   speechTranslateToEnglish: Schema.optionalKey(Schema.Boolean),
   speechCustomWords: Schema.optionalKey(SpeechCustomWords),

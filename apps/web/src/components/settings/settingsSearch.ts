@@ -560,6 +560,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["mic input audio device order priority preferred"],
   },
   {
+    id: "dictation-media",
+    title: "Sound while dictating",
+    to: "/settings/voice",
+    searchTerms: [
+      "speech voice music video player pause lower volume duck quiet mute system audio",
+    ],
+  },
+  {
     id: "dictation-shortcut-mode",
     title: "Dictation shortcut",
     to: "/settings/voice",

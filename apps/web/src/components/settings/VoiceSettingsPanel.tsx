@@ -26,6 +26,7 @@ import {
   type SpeechBenchmarkTier,
   type SpeechCustomWords,
   type SpeechModelUnloadTimeout,
+  type DictationMediaAction,
   type VoiceShortcutMode,
 } from "@t3tools/contracts";
 import { createModelSelection, pickModelSelection } from "@t3tools/shared/model";
@@ -151,6 +152,21 @@ function CloudSpeechLogo({ provider }: { provider: CloudSpeechProvider }) {
   );
 }
 const formatSize = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`;
+const DICTATION_MEDIA_LABELS: Record<DictationMediaAction, string> = {
+  none: "Leave as is",
+  lower: "Lower the volume",
+  pause: "Pause playback",
+};
+
+const isDictationMediaAction = (value: unknown): value is DictationMediaAction =>
+  typeof value === "string" && Object.hasOwn(DICTATION_MEDIA_LABELS, value);
+
+// Only the Mac app can reach the system's sound.
+const canQuietSystemMedia =
+  typeof window !== "undefined" &&
+  window.desktopBridge?.getClientPlatform() === "darwin" &&
+  typeof window.desktopBridge.holdSystemMedia === "function";
+
 const SHORTCUT_MODES: Record<VoiceShortcutMode, { label: string; hint: string }> = {
   auto: { label: "Auto", hint: "Tap to toggle, hold to talk" },
   hold: { label: "Hold", hint: "Record while held" },
@@ -1343,6 +1359,31 @@ export function VoiceSettingsPanel() {
           microphoneId={selectedMicrophone}
           onMicrophoneAccess={() => void refreshMicrophones()}
         />
+        {canQuietSystemMedia ? (
+          <SettingsRow
+            {...searchableSetting("dictation-media")}
+            title="Sound while dictating"
+            description="What happens to music and videos playing on this Mac while you dictate. They come back when the recording ends."
+            control={
+              <Select
+                value={settings.dictationMediaAction}
+                onValueChange={(value) => {
+                  if (isDictationMediaAction(value))
+                    void updateClientSettings({ dictationMediaAction: value });
+                }}
+              >
+                <SelectTrigger size="sm" aria-label="Sound while dictating">
+                  <SelectValue>{DICTATION_MEDIA_LABELS[settings.dictationMediaAction]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="none">Leave as is</SelectItem>
+                  <SelectItem value="lower">Lower the volume</SelectItem>
+                  <SelectItem value="pause">Pause playback</SelectItem>
+                </SelectPopup>
+              </Select>
+            }
+          />
+        ) : null}
         <SettingsRow
           {...searchableSetting("dictation-shortcut-mode")}
           title="Dictation shortcut"

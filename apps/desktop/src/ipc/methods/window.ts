@@ -38,6 +38,7 @@ import * as DesktopWslBackend from "../../wsl/DesktopWslBackend.ts";
 import * as DesktopWslEnvironment from "../../wsl/DesktopWslEnvironment.ts";
 import * as ElectronApp from "../../electron/ElectronApp.ts";
 import * as ElectronAudio from "../../electron/ElectronAudio.ts";
+import * as ElectronSystemMedia from "../../electron/ElectronSystemMedia.ts";
 import * as ElectronDialog from "../../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../../electron/ElectronMenu.ts";
 import * as ElectronShell from "../../electron/ElectronShell.ts";
@@ -602,4 +603,18 @@ export const restartAudioService = DesktopIpc.makeIpcMethod({
   payload: Schema.Void,
   result: Schema.Boolean,
   handler: ElectronAudio.restart,
+});
+
+export const holdSystemMedia = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.HOLD_SYSTEM_MEDIA_CHANNEL,
+  payload: Schema.Literals(["lower", "pause"]),
+  result: Schema.Void,
+  handler: ElectronSystemMedia.hold,
+});
+
+export const releaseSystemMedia = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.RELEASE_SYSTEM_MEDIA_CHANNEL,
+  payload: Schema.Void,
+  result: Schema.Void,
+  handler: ElectronSystemMedia.release,
 });
