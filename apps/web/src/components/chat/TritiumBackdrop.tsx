@@ -25,7 +25,6 @@ const REDUCED_FRAME_MS = 500;
 const COLOR_REFRESH_MS = 1000;
 const BREATH_MS = 1800;
 const BREATH_DEPTH = 0.5;
-const SHIFT_MS = 5200;
 
 const randomChar = () => BACKDROP_CHARS[Math.floor(Math.random() * BACKDROP_CHARS.length)]!;
 
@@ -71,7 +70,6 @@ export function TritiumBackdrop({
     let ink = "";
     let accent = "";
     let warning = "";
-    let shifted = "";
     let colorsReadAt = -Infinity;
     // Text marked `data-backdrop-clear` keeps the characters behind it faint, so it stays readable.
     let clearRects: BackdropClearRect[] = [];
@@ -93,7 +91,6 @@ export function TritiumBackdrop({
         ink = style.color;
         accent = style.borderTopColor;
         warning = style.outlineColor;
-        shifted = style.textDecorationColor;
         if (!rail) {
           const origin = canvas.getBoundingClientRect();
           clearRects = Array.from(document.querySelectorAll("[data-backdrop-clear]"), (element) => {
@@ -127,10 +124,6 @@ export function TritiumBackdrop({
         ? 1
         : 1 + BREATH_DEPTH * tuning.attention * Math.sin((now / BREATH_MS) * Math.PI * 2);
       const frame = { phase, seconds, echo: tuning.echo, knot: tuning.knot, pulse: tuning.pulse };
-      // While working the accent drifts to the shifted color and back.
-      const shift = reduceMotion
-        ? 0
-        : tuning.pulse * (0.5 - 0.5 * Math.cos((now / SHIFT_MS) * Math.PI * 2));
       const heatSeconds = reduceMotion ? 0 : now / 1000;
       context.clearRect(0, 0, width, height);
       for (let index = 0; index < cells.length; index++) {
@@ -156,9 +149,7 @@ export function TritiumBackdrop({
           continue;
         }
         // The accent turns to the warning color as attention rises; mid-blend draws both.
-        const calm = alpha * (1 - tuning.attention);
-        if (calm * (1 - shift) > 0.005) drawChar(char, cell, accent, calm * (1 - shift));
-        if (calm * shift > 0.005) drawChar(char, cell, shifted, calm * shift);
+        if (tuning.attention < 0.99) drawChar(char, cell, accent, alpha * (1 - tuning.attention));
         if (tuning.attention > 0.01) drawChar(char, cell, warning, alpha * tuning.attention);
       }
       context.globalAlpha = 1;

@@ -20,7 +20,10 @@ describe("buildBackdropCells", () => {
     // The trefoil's lobes pass close to the center, its corners stay empty.
     expect(Math.max(...cells.map((cell) => cell.core))).toBeGreaterThan(0.9);
     expect(cells[0]!.core).toBe(0);
-    expect(cells[0]!.side).toBeGreaterThan(0.9);
+    // The left edge fills toward the bottom corner; the top row fades out under the header.
+    const lowerLeft = cells.find((cell) => cell.x < 6 && Math.abs(cell.y - 340) < 6)!;
+    expect(lowerLeft.side).toBeGreaterThan(0.6);
+    expect(cells[0]!.side).toBeLessThan(0.05);
   });
 
   it("leaves the trefoil out of the rail and thickens its clouds toward the bottom", () => {
@@ -34,10 +37,12 @@ describe("buildBackdropCells", () => {
     const cells = buildBackdropCells(1200, 600, () => 0.5, "stage", 736);
     const middle = cells.find((cell) => Math.abs(cell.x - 600) < 4 && Math.abs(cell.y - 300) < 6)!;
     expect(middle.side).toBe(0);
-    expect(cells[0]!.side).toBeGreaterThan(0.9);
+    const lowerLeft = (list: typeof cells) =>
+      list.find((cell) => cell.x < 6 && Math.abs(cell.y - 500) < 6)!;
+    expect(lowerLeft(cells).side).toBeGreaterThan(0.6);
     // A full-width chat still leaves a band at its edges.
     const full = buildBackdropCells(1200, 600, () => 0.5, "stage", 1200);
-    expect(full[0]!.side).toBeGreaterThan(0.5);
+    expect(lowerLeft(full).side).toBeGreaterThan(0.5);
   });
 
   it("returns nothing for an empty area", () => {
@@ -68,8 +73,8 @@ describe("paintBackdropCell", () => {
     const margin = { ...base, side: 1, seed: 0.1 };
     const working = { ...still, knot: 0, pulse: 1 };
     // A crest of the ring lights the cell; the trough between crests leaves it empty.
-    const crest = (0.5 * Math.PI) / 0.045;
-    const trough = (1.5 * Math.PI) / 0.045;
+    const crest = (0.5 * Math.PI) / 0.03;
+    const trough = (1.5 * Math.PI) / 0.03;
     expect(paintBackdropCell({ ...margin, inward: crest }, working)?.tone).toBe("accent");
     expect(paintBackdropCell({ ...margin, inward: trough }, working)).toBeNull();
   });

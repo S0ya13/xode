@@ -50,6 +50,9 @@ export const BACKDROP_DEFAULT_COLUMN = 736;
 // Even a full-width chat leaves this band at each side for the margins.
 const MIN_MARGIN = 48;
 const MARGIN_FADE = 140;
+// The field fades out under the header and above the bottom edge, so it has no hard rim.
+const TOP_FADE = 110;
+const BOTTOM_FADE = 50;
 
 // The margins beside the chat column, so characters never sit behind its text.
 const stageSide = (x: number, y: number, width: number, height: number, column: number) => {
@@ -57,7 +60,8 @@ const stageSide = (x: number, y: number, width: number, height: number, column: 
   const inner = Math.max(0, Math.min(column / 2, half - MIN_MARGIN));
   const outer = Math.min(inner + MARGIN_FADE, half);
   const corner = smoothstep(0.4, 1, Math.abs(y - height / 2) / (height / 2));
-  return smoothstep(inner, outer, Math.abs(x - half)) * (0.55 + 0.45 * corner);
+  const rims = smoothstep(0, TOP_FADE, y) * smoothstep(0, BOTTOM_FADE, height - y);
+  return smoothstep(inner, outer, Math.abs(x - half)) * (0.55 + 0.45 * corner) * rims;
 };
 
 export function buildBackdropCells(
@@ -159,17 +163,17 @@ export function paintBackdropCell(
     0.5 +
     0.25 * Math.sin(cell.x * 0.018 + seconds * 0.22) * Math.sin(cell.y * 0.028 - seconds * 0.15) +
     0.25 * Math.sin((cell.x * 0.7 + cell.y) * 0.011 + seconds * 0.17);
-  const ring = 0.5 + 0.5 * Math.sin(cell.inward * 0.045 - seconds * 2);
+  const ring = 0.5 + 0.5 * Math.sin(cell.inward * 0.03 - seconds * 1.2);
   const field = cloud + (ring - cloud) * frame.pulse;
   const density = cell.side * smoothstep(0.35, 0.9, field);
   if (cell.seed < density * 0.85) {
-    // While working nearly every margin character takes the accent and burns brighter.
+    // While working nearly every margin character takes the accent.
     return {
-      alpha: 0.12 + (0.38 + 0.25 * frame.pulse) * density,
+      alpha: 0.12 + 0.38 * density,
       tone: density > 0.6 * (1 - frame.pulse) + 0.05 ? "accent" : "ink",
     };
   }
-  if (cell.seed > 0.985 && cell.side > 0) return { alpha: 0.08, tone: "ink" };
+  if (cell.seed > 0.985 && cell.side > 0.3) return { alpha: 0.08 * cell.side, tone: "ink" };
   return null;
 }
 
@@ -188,15 +192,15 @@ export interface BackdropTuning {
   readonly attention: number;
   /** 0 to 1: only the empty thread shows the trefoil; a running one keeps its middle clear. */
   readonly knot: number;
-  /** 0 to 1: rings run in from the edges and the accent drifts toward violet while the agent works. */
+  /** 0 to 1: slow rings run in from the edges while the agent works. */
   readonly pulse: number;
 }
 
 export const BACKDROP_TUNING: Record<BackdropMode, BackdropTuning> = {
   hero: { strength: 1, speed: 1, churn: 0.012, echo: 0, attention: 0, knot: 1, pulse: 0 },
   idle: { strength: 0.3, speed: 0.6, churn: 0.008, echo: 0, attention: 0, knot: 0, pulse: 0 },
-  working: { strength: 0.9, speed: 4, churn: 0.09, echo: 1, attention: 0, knot: 0, pulse: 1 },
-  attention: { strength: 0.8, speed: 0.5, churn: 0.015, echo: 0, attention: 1, knot: 0, pulse: 0 },
+  working: { strength: 0.6, speed: 1.6, churn: 0.02, echo: 1, attention: 0, knot: 0, pulse: 1 },
+  attention: { strength: 0.6, speed: 0.5, churn: 0.01, echo: 0, attention: 1, knot: 0, pulse: 0 },
 };
 
 export const BACKDROP_WAVE_PERIOD_MS = WAVE_PERIOD_MS;
