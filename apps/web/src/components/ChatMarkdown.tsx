@@ -162,6 +162,7 @@ import { hostEnvironmentIdAtom } from "../state/primaryEnvironment";
 import { cn } from "../lib/utils";
 import { resolveRemoteOpenState, useRemoteOpenResolution } from "../remoteOpen";
 import { useRightPanelStore } from "../rightPanelStore";
+import { useOpenIssueLink } from "../lib/openIssueLink";
 import { readThreadShell, useProjects } from "../state/entities";
 import { serverEnvironment } from "../state/server";
 import { shellEnvironment } from "../state/shell";
@@ -720,6 +721,7 @@ function useChatMarkdownState({
     );
   };
   const openChangeRequestLink = useOpenChangeRequestLink(threadRef, pullRequestPanelRef);
+  const openIssueLink = useOpenIssueLink(threadRef, pullRequestPanelRef);
   const openDeferredMarkdownLink = useOpenLink(threadRef);
   // Subscribe so hydrated settings apply before the anchor synchronously decides whether to intercept _blank.
   const linkTargetPreference = useClientSettings((settings) => settings.browserLinkTarget);
@@ -1021,6 +1023,7 @@ function useChatMarkdownState({
     onUseArtifactTemplate,
     onRunShellCommand,
     openChangeRequestLink,
+    openIssueLink,
     openDeferredMarkdownLink,
     openExternalLinkInPreview,
     openMarkdownMedia,
@@ -1237,6 +1240,7 @@ const CHAT_MARKDOWN_COMPONENTS = {
       threadRef,
       openMarkdownMedia,
       openChangeRequestLink,
+      openIssueLink,
       openDeferredMarkdownLink,
       linkTargetPreference,
       openExternalLinkInPreview,
@@ -1352,7 +1356,8 @@ const CHAT_MARKDOWN_COMPONENTS = {
             }
             if (
               !href ||
-              openChangeRequestLink(event, href, undefined, environmentId ?? undefined)
+              openChangeRequestLink(event, href, undefined, environmentId ?? undefined) ||
+              openIssueLink(event, href, environmentId ?? undefined)
             ) {
               return;
             }
@@ -1477,7 +1482,20 @@ const CHAT_MARKDOWN_COMPONENTS = {
                 environmentId ?? undefined,
               )
             }
-            onOpenFallback={openDeferredMarkdownLink}
+            // A reference that is not a pull request may still be an issue this app can show.
+            onOpenFallback={async (url) => {
+              const opened = openIssueLink(
+                {
+                  metaKey: false,
+                  ctrlKey: false,
+                  preventDefault: () => undefined,
+                  stopPropagation: () => undefined,
+                },
+                url,
+                environmentId ?? undefined,
+              );
+              if (!opened) await openDeferredMarkdownLink(url);
+            }}
           />
         );
       }
