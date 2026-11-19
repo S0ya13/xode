@@ -8,7 +8,7 @@ interface MarkdownAstNode {
 }
 
 // Fork: SUCCESS, NEXT and REPLIES extend GitHub's set, and text after the marker becomes the title.
-const GITHUB_ALERT_MARKER =
+export const GITHUB_ALERT_MARKER =
   /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|SUCCESS|NEXT|REPLIES)\](?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i;
 
 function readGithubAlert(node: MarkdownAstNode): void {
