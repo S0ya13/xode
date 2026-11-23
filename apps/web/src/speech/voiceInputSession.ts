@@ -4,6 +4,7 @@ import {
   voiceInputBlocksSubmission,
   type VoiceDraftSnapshot,
   type VoiceInputControllerDependencies,
+  type VoiceInputErrorCode,
   type VoiceInputState,
 } from "@t3tools/client-runtime/voice-input";
 import type { PreparedConnection } from "@t3tools/client-runtime/connection";
@@ -12,22 +13,29 @@ import type {
   CloudSpeechProvider,
   ClientSettings,
   EnvironmentId,
+  EnvironmentSpeechStatus,
   SpeechCustomWords,
   SpeechPostProcessingOptions,
   SpeechStreamText,
   SpeechTranscriptionOptions,
 } from "@t3tools/contracts";
-import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts";
+import { DEFAULT_CLIENT_SETTINGS, EnvironmentInternalError } from "@t3tools/contracts";
 import { resolveSpeechVocabulary } from "@t3tools/shared/speech";
+import * as Schema from "effect/Schema";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { toastManager } from "../components/ui/toast";
 import { chooseRecordingMicrophone } from "./browserMicrophones";
-import { createBrowserVoiceInputPlatform } from "./browserVoiceInput";
+import {
+  createAppleSpeechVoiceInputPlatform,
+  createBrowserVoiceInputPlatform,
+} from "./browserVoiceInput";
 import { runEnvironmentSpeech } from "./runEnvironmentSpeech";
 import { bindAudioGrant, readCleanupGrant } from "./voiceConsent";
 import { msg } from "gt-react";
 import { m } from "../i18n/messages";
+
+const isEnvironmentInternalError = Schema.is(EnvironmentInternalError);
 
 export const IDLE_VOICE_STATE: VoiceInputState = { phase: "idle", error: null, errorAction: null };
 
@@ -55,8 +63,6 @@ export type VoiceInputTarget = {
   readonly open: (() => void) | null;
   readonly readDraft: () => DraftInput | null;
   readonly commitDraft: (text: string, selection: DraftInput["selection"]) => void;
-  /** Writes the stored draft directly, so a confirmed send can finish after its editor has gone. */
-  readonly commitStoredDraft: ((text: string) => void) | null;
   readonly readContext: () => VoiceRecordingContext;
 };
 
@@ -73,20 +79,11 @@ export type VoiceInputSessionActivity = {
 };
 
 type SessionKey = {
-  readonly prepared: PreparedConnection;
+  /** Null is Apple Speech, which transcribes on this Mac without an environment. */
+  readonly prepared: PreparedConnection | null;
   readonly grantId: string;
   readonly cloudProvider: CloudSpeechProvider | undefined;
   readonly cloudModel: CloudSpeechModelId | undefined;
-};
-
-/** A Send pressed during dictation; it goes out with the transcript, or is cancelled. */
-type VoiceSubmission = {
-  readonly ownerKey: string;
-  readonly submit: (text: string) => void;
-  readonly cancel: () => void;
-  /** False once the draft changed after Send, so the transcript must not be sent with it. */
-  readonly unchanged: () => boolean;
-  text?: string;
 };
 
 const SILENT_ACTIVITY: VoiceInputSessionActivity = { level: 0, preview: null };
@@ -111,7 +108,11 @@ export class VoiceInputSession {
   readonly key: SessionKey;
   private readonly controller: VoiceInputController;
   private target: VoiceInputTarget | null = null;
-  private submission: VoiceSubmission | null = null;
+  private pendingSubmission: {
+    readonly ownerKey: string;
+    readonly submit: (text: string) => void;
+    text?: string;
+  } | null = null;
   private snapshot: VoiceInputSessionSnapshot = {
     state: IDLE_VOICE_STATE,
     target: null,
@@ -122,6 +123,7 @@ export class VoiceInputSession {
   private readonly activityListeners = new Set<() => void>();
   private disposed = false;
   private holdingSystemMedia = false;
+  private onSpeechStatus: ((status: EnvironmentSpeechStatus) => void) | undefined;
 
   constructor(key: SessionKey) {
     this.key = key;
@@ -133,11 +135,9 @@ export class VoiceInputSession {
           readonly cleanupPrepared: PreparedConnection | null;
         }
       | undefined;
-    const platform = createBrowserVoiceInputPlatform({
-      prepared: key.prepared,
-      cloudProvider: key.cloudProvider,
-      cloudModel: key.cloudModel,
+    const platformInput = {
       hasAudioConsent,
+      getStatusListener: () => this.onSpeechStatus,
       getStreamingEnabled: () =>
         this.target?.readContext().clientSettings.speechStreaming ??
         DEFAULT_CLIENT_SETTINGS.speechStreaming,
@@ -148,7 +148,7 @@ export class VoiceInputSession {
         const cleanupGrant = context.cleanup ? readCleanupGrant() : null;
         const cleanupEnabled = cleanupGrant !== null;
         const cue = cleanupEnabled && context.cleanupPrepared ? settings.speechCorrectionWord : "";
-        const speechCustomWords = resolveSpeechVocabulary({
+        const { speechCustomWords, speechHints } = resolveSpeechVocabulary({
           personal: settings.speechCustomWords,
           project: context.projectWords,
           hints: [cue, context.projectName ?? ""],
@@ -168,21 +168,30 @@ export class VoiceInputSession {
           speechLanguage: settings.speechLanguage,
           speechTranslateToEnglish: settings.speechTranslateToEnglish,
           speechCustomWords,
+          ...(speechHints.length > 0 ? { speechHints } : {}),
           speechRemoveFillerWords: settings.speechRemoveFillerWords,
           ...(cue.trim() ? { speechCorrectionWord: cue } : {}),
           speechSilenceFiltering: settings.speechSilenceFiltering,
         };
       },
       getMicrophoneId: chooseRecordingMicrophone,
-      onLevel: (level) => this.publishActivity({ ...this.activity, level }),
+      onLevel: (level: number) => this.publishActivity({ ...this.activity, level }),
       onDurationLimit: () => void this.controller.stop(),
-      onText: (preview) => {
-        if (!this.disposed) this.publishActivity({ ...this.activity, preview });
-      },
-      onError: (message, code) => {
+      onError: (message: string, code?: VoiceInputErrorCode) => {
         if (!this.disposed) void this.controller.interruptRecording(message, null, code);
       },
-    });
+    };
+    const platform = key.prepared
+      ? createBrowserVoiceInputPlatform({
+          ...platformInput,
+          prepared: key.prepared,
+          cloudProvider: key.cloudProvider,
+          cloudModel: key.cloudModel,
+          onText: (preview) => {
+            if (!this.disposed) this.publishActivity({ ...this.activity, preview });
+          },
+        })
+      : createAppleSpeechVoiceInputPlatform(platformInput);
     const postProcess: NonNullable<VoiceInputControllerDependencies["postProcess"]> = (
       transcript,
       options,
@@ -220,50 +229,44 @@ export class VoiceInputSession {
       releaseRecording: async () => platform.cancelRecording(),
       deleteRecording: platform.deleteRecording,
       postProcess,
-      onPostProcessingError: () =>
+      onPostProcessingError: (error) => {
+        const added = m(msg("The original transcript was added."));
+        const detail = isEnvironmentInternalError(error) ? error.detail : undefined;
         toastManager.add({
           type: "warning",
           title: m(msg("Transcript cleanup failed")),
-          description: m(msg("The original transcript was added.")),
-        }),
+          description: detail ? `${detail} ${added}` : added,
+        });
+      },
       readDraft: (): VoiceDraftSnapshot | null => {
         const target = this.target;
-        const submission = this.submission;
-        // A draft edited after Send no longer holds what was confirmed; keep the audio to retry.
-        if (submission?.ownerKey === target?.ownerKey && submission && !submission.unchanged())
-          return null;
         const draft = target?.readDraft();
         return target && draft ? { ownerKey: target.ownerKey, ...draft } : null;
       },
       commitDraft: (text, selection) => {
-        const target = this.target;
-        const submission = this.submission;
-        if (!target) return;
-        if (submission?.ownerKey === target.ownerKey && target.commitStoredDraft) {
-          target.commitStoredDraft(text);
-          submission.text = text;
-          return;
+        const ownerKey = this.target?.ownerKey ?? null;
+        this.target?.commitDraft(text, selection);
+        if (ownerKey !== null && this.pendingSubmission?.ownerKey === ownerKey) {
+          this.pendingSubmission.text = text;
         }
-        target.commitDraft(text, selection);
       },
       onStateChange: (state) => {
         this.syncSystemMedia(state.phase === "preparing" || state.phase === "recording");
-        if (state.phase === "idle") this.settleSubmission(true);
-        if (state.phase === "error") {
-          if (this.submission)
-            toastManager.add({
-              type: "error",
-              title: m(msg("Voice message was not sent")),
-              description: state.error,
-            });
-          this.settleSubmission(false);
-        }
         if (this.disposed) return;
         const recordingStartedAt =
           state.phase !== "recording" ? null : (this.snapshot.recordingStartedAt ?? Date.now());
         this.publish({ ...this.snapshot, state, recordingStartedAt });
         if (state.phase !== "recording" && state.phase !== "transcribing")
           this.publishActivity(SILENT_ACTIVITY);
+        if (state.phase === "error") {
+          this.pendingSubmission = null;
+          return;
+        }
+        if (state.phase === "idle" && this.pendingSubmission !== null) {
+          const pending = this.pendingSubmission;
+          this.pendingSubmission = null;
+          if (pending.text !== undefined) pending.submit(pending.text);
+        }
       },
     });
   }
@@ -291,13 +294,18 @@ export class VoiceInputSession {
   readonly getActivity = (): VoiceInputSessionActivity => this.activity;
 
   /** Starts recording into `target`, or does nothing while another draft holds the microphone. */
-  start(target: VoiceInputTarget): Promise<void> {
+  start(
+    target: VoiceInputTarget,
+    onSpeechStatus?: (status: EnvironmentSpeechStatus) => void,
+  ): Promise<void> {
     if (this.disposed) return Promise.resolve();
     const busyElsewhere =
       voiceInputBlocksSubmission(this.controller.currentState) &&
       this.target?.ownerKey !== target.ownerKey;
     if (busyElsewhere) return Promise.resolve();
+    this.pendingSubmission = null;
     this.target = target;
+    this.onSpeechStatus = onSpeechStatus;
     this.publishActivity(SILENT_ACTIVITY);
     this.publish({ ...this.snapshot, target });
     return this.controller.start();
@@ -310,11 +318,29 @@ export class VoiceInputSession {
     this.publish({ ...this.snapshot, target });
   }
 
+  /** Queues a submission to run once the active dictation commits its transcript. */
+  queueSubmission(ownerKey: string, submit: (text: string) => void): boolean {
+    if (
+      this.disposed ||
+      this.target?.ownerKey !== ownerKey ||
+      !voiceInputBlocksSubmission(this.controller.currentState) ||
+      this.pendingSubmission !== null
+    ) {
+      return false;
+    }
+    this.pendingSubmission = { ownerKey, submit };
+    if (this.controller.currentState.phase === "recording") {
+      void this.controller.stop();
+    }
+    return true;
+  }
+
   stop(): Promise<void> {
     return this.controller.stop();
   }
 
   cancel(): void {
+    this.pendingSubmission = null;
     this.controller.cancel();
   }
 
@@ -322,35 +348,17 @@ export class VoiceInputSession {
     this.controller.skipPostProcessing();
   }
 
-  /**
-   * Sends the transcript once it lands in `ownerKey`'s stored draft, even if its editor has moved
-   * on by then. False when there is no dictation to wait for or its draft cannot outlive the editor.
-   */
-  queueSubmission(ownerKey: string, submission: Omit<VoiceSubmission, "ownerKey">): boolean {
-    const state = this.controller.currentState;
-    if (
-      this.disposed ||
-      this.submission ||
-      this.target?.ownerKey !== ownerKey ||
-      !this.target.commitStoredDraft ||
-      !voiceInputBlocksSubmission(state)
-    )
-      return false;
-    this.submission = { ...submission, ownerKey };
-    if (state.phase === "recording") void this.controller.stop();
-    return true;
-  }
-
   /** The editor for `ownerKey` now shows another draft; only a persistent target keeps going. */
   ownerChanged(ownerKey: string): void {
     if (this.target?.ownerKey !== ownerKey || this.target.persistent) return;
+    this.pendingSubmission = null;
     this.controller.ownerChanged();
   }
 
   dispose(): void {
     this.disposed = true;
     this.syncSystemMedia(false);
-    this.settleSubmission(false);
+    this.pendingSubmission = null;
     this.controller.dispose();
     this.listeners.clear();
     this.activityListeners.clear();
@@ -368,14 +376,6 @@ export class VoiceInputSession {
       this.holdingSystemMedia = false;
       void desktop?.releaseSystemMedia?.().catch(() => undefined);
     }
-  }
-
-  private settleSubmission(delivered: boolean): void {
-    const submission = this.submission;
-    this.submission = null;
-    if (!submission) return;
-    if (delivered && submission.text !== undefined) submission.submit(submission.text);
-    else submission.cancel();
   }
 
   private publish(snapshot: VoiceInputSessionSnapshot): void {
@@ -437,17 +437,20 @@ function subscribeRegistry(listener: () => void): () => void {
 export function useRetainedVoiceInputSession(input: {
   readonly prepared: PreparedConnection | null;
   readonly grantId: string | null;
+  readonly onDevice?: boolean | undefined;
   readonly cloudProvider?: CloudSpeechProvider | undefined;
   readonly cloudModel?: CloudSpeechModelId | undefined;
 }): VoiceInputSession | null {
-  const { prepared, grantId, cloudProvider, cloudModel } = input;
+  const { grantId, cloudProvider, cloudModel } = input;
+  const prepared = input.onDevice ? null : input.prepared;
+  const ready = (input.onDevice === true || prepared !== null) && grantId !== null;
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- retains the shared recording session for this destination while mounted
   useEffect(() => {
-    if (!prepared || !grantId || typeof navigator === "undefined") return;
+    if (!ready || !grantId || typeof navigator === "undefined") return;
     return retainVoiceInputSession({ prepared, grantId, cloudProvider, cloudModel });
-  }, [prepared, grantId, cloudProvider, cloudModel]);
+  }, [ready, prepared, grantId, cloudProvider, cloudModel]);
   return useSyncExternalStore(subscribeRegistry, () =>
-    prepared && grantId ? findSession({ prepared, grantId, cloudProvider, cloudModel }) : null,
+    ready && grantId ? findSession({ prepared, grantId, cloudProvider, cloudModel }) : null,
   );
 }
 
