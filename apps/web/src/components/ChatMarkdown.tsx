@@ -2051,8 +2051,11 @@ function markdownIslandOptions(state: ChatMarkdownComponentState): MarkdownIslan
         case "details":
         case "table":
           return true;
-        case "blockquote":
-          return GITHUB_ALERT_PRESENTATIONS[String(node.properties.dataAlert ?? "")] !== undefined;
+        case "blockquote": {
+          const alert = String(node.properties.dataAlert ?? "");
+          // Fork: REPLIES renders as reply buttons, not an alert card.
+          return alert === "replies" || GITHUB_ALERT_PRESENTATIONS[alert] !== undefined;
+        }
         case "div":
           return artifactTemplateFromHastProperties(node.properties) !== null;
         case "input":

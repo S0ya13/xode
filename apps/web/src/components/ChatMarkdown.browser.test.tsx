@@ -848,6 +848,20 @@ describe("ChatMarkdown copy", () => {
     expect(select(labelText, bodyText, "Back up".length)).toBe("Warning\n\nBack up");
   });
 
+  it("turns a REPLIES block into reply buttons that send their text", async () => {
+    setup();
+    const sent: string[] = [];
+    await using screen = await renderText("> [!REPLIES]\n> - Yes\n> - Not now", {
+      onSendReply: (text) => sent.push(text),
+    });
+    expect(screen.container.querySelector("blockquote")).toBeNull();
+    const buttons = screen.container.querySelectorAll<HTMLButtonElement>(
+      "[data-markdown-replies] button",
+    );
+    expect([...buttons].map((button) => button.textContent)).toEqual(["Yes", "Not now"]);
+    buttons[1]!.click();
+    expect(sent).toEqual(["Not now"]);
+  });
   it("keeps a callout's title when it copies as alert Markdown", async () => {
     setup();
     await using screen = await renderText("> [!WARNING] Two old warnings\n> Back up first.");
