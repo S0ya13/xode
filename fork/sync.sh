@@ -25,11 +25,8 @@ for arg in "$@"; do
 done
 
 log() { echo "$(date '+%F %T') $1"; }
-notify() {
-  log "$1"
-  $from_app && return 0
-  osascript -e "display notification \"$1\" with title \"Tritium\"" >/dev/null 2>&1 || true
-}
+# Log only: desktop notifications were noise. Read ~/Library/Logs/t3code-fork-sync.log.
+notify() { log "$1"; }
 
 # Replacing the bundle under a running Electron app crashes its helper processes, so wait until it quits.
 apply_staged() {
